@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chinatown Street View Audit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: desk tool — header with rater + sync state, left rail of routes and stops, right pane with the segment form; Street View opens in its own browser tab */
+:root{
+  --bg:#f3f4f2; --panel:#ffffff; --fg:#1d2321; --muted:#5d6763; --line:#d5d9d6;
+  --accent:#2b5fb4; --accent-ink:#ffffff; --accent-soft:#e6eefb; --ok:#2f7d32; --ok-soft:#dff0e1; --warn:#9a5a00; --warn-soft:#fbf0dc; --bad:#b3261e; --bad-soft:#fbe3e1;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#141817; --panel:#1c2120; --fg:#e6ebe8; --muted:#9aa5a0; --line:#323a37;
+  --accent:#7aa7f0; --accent-ink:#0b1424; --accent-soft:#1c2a40; --ok:#7cc77f; --ok-soft:#1d3320; --warn:#f0b35a; --warn-soft:#3a2d16; --bad:#ff7a6e; --bad-soft:#3d1d1a; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+h1{font-family:var(--display);font-weight:700;font-size:1.5rem;margin:0;letter-spacing:.01em}
+.who{display:flex;gap:8px;align-items:center}
+.who label{font-size:.85rem;color:var(--muted)}
+input[type=text],input[type=number],input[type=url],select,textarea{border:1px solid var(--line);border-radius:7px;padding:7px 9px;background:var(--panel)}
+.who input{width:170px}
+.spacer{flex:1}
+.sync{font-size:.85rem;color:var(--muted);display:flex;gap:8px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 13px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:4px 10px;font-size:.85rem}
+.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:0;min-height:calc(100vh - 58px)}
+@media (max-width:820px){.layout{grid-template-columns:1fr}}
+nav.rail{border-right:1px solid var(--line);padding:14px;display:grid;gap:10px;align-content:start;background:var(--panel)}
+@media (min-width:821px){nav.rail{position:sticky;top:58px;height:calc(100vh - 58px);overflow:auto}}
+.routes{display:flex;flex-wrap:wrap;gap:6px}
+.rchip{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:3px 8px;cursor:pointer;display:grid;line-height:1.1;min-width:46px;text-align:left}
+.rchip b{font-family:var(--display);font-size:1.1rem}
+.rchip small{font-size:.7rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.rchip[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.rname{font-family:var(--display);font-weight:600;font-size:1.15rem}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.stops{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.stop{width:100%;border:0;background:none;text-align:left;padding:7px 8px;border-radius:7px;cursor:pointer;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center}
+.stop:hover{background:var(--bg)}
+.stop[aria-current=true]{background:var(--accent-soft)}
+.stop .k{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;font-size:.85rem}
+.stop .c{font-family:var(--mono);font-size:.82rem}
+.pill{font-size:.7rem;font-weight:600;border-radius:999px;padding:1px 7px;white-space:nowrap}
+.pill.done{background:var(--ok-soft);color:var(--ok)}
+.pill.nv{background:var(--line);color:var(--muted)}
+.pill.team{background:var(--accent-soft);color:var(--accent)}
+.pill.flag{background:var(--warn-soft);color:var(--warn)}
+main{padding:18px 22px 110px;display:grid;gap:14px;align-content:start;max-width:880px}
+.seghead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:end}
+.eyebrow{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:.8rem;color:var(--muted);font-weight:600}
+.code{font-family:var(--mono);font-size:1.35rem}
+.meta{color:var(--muted)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+a.maplink{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--accent);color:var(--accent);text-decoration:none;border-radius:8px;padding:6px 12px;font-weight:600;background:var(--panel)}
+a.maplink:hover{background:var(--accent-soft)}
+.notice{border-radius:8px;padding:8px 12px;font-size:.92rem}
+.notice.warn{background:var(--warn-soft)}
+.notice.info{background:var(--accent-soft)}
+fieldset{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0;background:var(--panel);display:grid;gap:8px}
+fieldset.sv{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+fieldset.err{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
+legend{padding:0 4px;font-weight:600}
+.qn{font-family:var(--display);font-weight:700;color:var(--accent);margin-right:6px}
+.hint{font-size:.8rem;color:var(--muted);font-weight:400;margin-left:6px}
+.opts{display:flex;flex-wrap:wrap;gap:7px}
+.opt{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 11px;cursor:pointer;display:inline-flex;gap:7px;align-items:center;min-height:38px}
+.opt .k{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.opt.multi::before{content:"";width:13px;height:13px;border:1.5px solid currentColor;border-radius:3px}
+.opt[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.opt[aria-pressed=true] .k{color:var(--accent-ink)}
+.opt.multi[aria-pressed=true]::before{background:currentColor;box-shadow:inset 0 0 0 2px var(--accent)}
+.opt.ct{border-style:dashed}
+.emsg{color:var(--bad);font-size:.85rem}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row label{font-size:.88rem;color:var(--muted)}
+.stepper{display:flex;gap:6px;align-items:center}
+.stepper button{width:38px;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--bg);cursor:pointer;font-size:1.2rem}
+.stepper input{width:70px;text-align:center}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--panel);border-top:1px solid var(--line);padding:10px 20px}
+.savebar .in{max-width:1180px;margin:0 auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.status{font-size:.9rem;color:var(--muted)}
+.status.bad{color:var(--bad)}.status.ok{color:var(--ok)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);max-width:720px;width:calc(100% - 32px);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog h2{font-family:var(--display);margin:0 0 6px;font-size:1.5rem}
+dialog ol{padding-left:20px;display:grid;gap:6px}
+pre.code{font-family:var(--mono);font-size:.72rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;white-space:pre}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:24px;color:var(--muted);background:var(--panel)}
+.testbar{position:sticky;top:58px;z-index:4;background:var(--warn-soft);border-bottom:1px solid var(--warn);padding:8px 20px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:.92rem}
+#testBtn[aria-pressed=true]{background:var(--warn-soft);border-color:var(--warn)}
+ul.checks{list-style:none;padding:0;margin:10px 0;display:grid;gap:8px}
+ul.checks li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:start}
+.mark{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-weight:700;font-size:.8rem;background:var(--line);color:var(--muted)}
+.mark.pass{background:var(--ok-soft);color:var(--ok)}.mark.fail{background:var(--bad-soft);color:var(--bad)}.mark.skip{background:var(--line);color:var(--muted)}.mark.run{background:var(--accent-soft);color:var(--accent)}
+.checks .why{font-size:.85rem;color:var(--muted)}
+table.mini{border-collapse:collapse;font-size:.85rem;width:100%}
+table.mini td,table.mini th{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Chinatown Street View audit</h1>
+  <div class="who"><label for="rater">Rater</label><input type="text" id="rater" placeholder="Your name" autocomplete="name"></div>
+  <div class="spacer"></div>
+  <div class="sync" id="sync"><span class="dot" id="syncDot"></span><span id="syncText">Saving on this computer only</span></div>
+  <button class="btn small" id="checkBtn">Check setup</button>
+  <button class="btn small" id="testBtn" aria-pressed="false">Test mode</button>
+  <button class="btn small" id="setupBtn">Team sheet</button>
+  <button class="btn small" id="dataBtn">Data</button>
+</header>
+<div class="testbar" id="testbar" hidden>
+  <b>Test mode.</b> Saves are labeled “(TEST)” and kept apart from real ratings, here and in the team sheet. Try the whole flow, then clear it.
+  <button class="btn small" id="clearTest">Clear test data</button>
+  <button class="btn small" id="exitTest">Leave test mode</button>
+  <span id="testStatus"></span>
+</div>
+
+<div class="layout">
+  <nav class="rail" aria-label="Routes and stops">
+    <div class="routes" id="routes"></div>
+    <div><div class="rname" id="rname"></div><div class="status" id="rprog"></div></div>
+    <div class="bar"><i id="rbar" style="width:0"></i></div>
+    <ul class="stops" id="stops"></ul>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<div class="savebar" id="savebar" hidden>
+  <div class="in">
+    <button class="btn primary" id="saveBtn">Save and next</button>
+    <span class="status" id="saveStatus" role="status"></span>
+  </div>
+</div>
+
+<dialog id="setupDlg">
+  <h2>Team sheet (optional)</h2>
+  <p>Without this, entries stay in this browser and you send your CSV to the audit lead. With it, every save also goes to one shared Google Sheet, and you can see who has rated what.</p>
+  <label for="sheetUrl" style="font-weight:600">Web app URL</label>
+  <div class="row"><input type="url" id="sheetUrl" style="flex:1;min-width:260px" placeholder="https://script.google.com/macros/s/…/exec"><button class="btn" id="testUrl">Test</button></div>
+  <p class="status" id="urlStatus"></p>
+  <details id="trouble">
+    <summary style="cursor:pointer;font-weight:600">If the test fails: what the test link shows, and the fix</summary>
+    <table class="mini">
+      <tr><th>The test link shows…</th><th>Fix</th></tr>
+      <tr><td>Text starting with {"ok":true</td><td>The sheet works. The problem is where the tool is open: use your GitHub Pages link or the downloaded file in Chrome, Edge, Firefox or Safari, not a preview window, and turn off ad-blocking or “shields” for the page.</td></tr>
+      <tr><td>A Google sign-in page</td><td>Access isn't Anyone. Deploy › Manage deployments › pencil › Who has access: <b>Anyone</b> (not “Anyone with a Google account”) › Deploy. On a school or work Google account your admin may not allow Anyone; deploy from a personal Gmail account instead.</td></tr>
+      <tr><td>“Script function not found: doGet”</td><td>The deployment is an old version. Paste the code, save, then Deploy › Manage deployments › pencil › Version: <b>New version</b> › Deploy. The /exec link stays the same.</td></tr>
+      <tr><td>“Cannot read properties of null” or “isn't attached to a Google Sheet”</td><td>The script was made at script.google.com instead of from the sheet. Open the Google Sheet › Extensions › Apps Script, paste the code there, and deploy from that project.</td></tr>
+      <tr><td>“Authorization is required” or a permissions screen</td><td>In the Apps Script editor, pick doGet and click Run once, approve the permissions (Advanced › Go to project if Google warns you), then test again.</td></tr>
+      <tr><td>“Sorry, unable to open the file” or a 404</td><td>The link is wrong or the deployment was archived. Copy the Web app URL again from Deploy › Manage deployments.</td></tr>
+    </table>
+  </details>
+  <details>
+    <summary style="cursor:pointer;font-weight:600">How the audit lead sets this up (once, about 5 minutes)</summary>
+    <ol>
+      <li>Create a new Google Sheet. Choose Extensions, then Apps Script.</li>
+      <li>Delete the sample code, paste the code below, and save.</li>
+      <li>In the function menu next to Run, pick <b>testSetup</b> and click Run. Approve the permissions (if Google warns the app isn't verified, choose Advanced, then Go to the project). The log should say Connected.</li>
+      <li>Choose Deploy, then New deployment, type Web app. Set Execute as: <b>Me</b>, and Who has access: <b>Anyone</b> (not “Anyone with a Google account”). Deploy.</li>
+      <li>Copy the web app URL that ends in /exec and send it to the raters. Each rater pastes it here once.</li>
+    </ol>
+    <p class="status">Anyone with the URL can add rows, so share it only with your team.</p>
+    <div class="row"><button class="btn small" id="copyCode">Copy code</button><span class="status" id="codeStatus"></span></div>
+    <pre class="code" id="gsCode"></pre>
+  </details>
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn" id="closeSetup">Done</button></div>
+</dialog>
+
+<dialog id="checkDlg">
+  <h2>Check setup</h2>
+  <p>Runs the same steps a rater's save does, using a throwaway test row that is removed afterwards. Run it from the link your team will use, in a normal (not private) browser window.</p>
+  <ul class="checks" id="checks"></ul>
+  <div class="row"><button class="btn primary" id="runChecks">Run checks</button><button class="btn" id="dlTest">Download a test CSV</button><span class="status" id="checkStatus"></span></div>
+  <p class="status">After the checks pass, turn on Test mode and rate two or three segments yourself. Then look at the team sheet's “GSV entries” tab, download the CSV from Data, and try pasting it into the Street View workbook. Clear test data when you're done.</p>
+  <div class="row" style="justify-content:flex-end"><button class="btn" id="closeCheck">Done</button></div>
+</dialog>
+
+<dialog id="dataDlg">
+  <h2>Data on this computer</h2>
+  <div id="dataSummary"></div>
+  <div class="row" style="margin:10px 0">
+    <button class="btn" id="dlCsv">Download CSV</button>
+    <button class="btn" id="resend">Send unsent to team sheet</button>
+    <label class="btn" for="importCsv" style="cursor:pointer">Import CSV</label>
+    <input type="file" id="importCsv" accept=".csv,text/csv" hidden>
+  </div>
+  <p class="status" id="dataStatus"></p>
+  <p class="status">The CSV columns match the GSV Data sheet in Chinatown_PEDS_SectionB_StreetView.xlsx (columns A to AZ), so rows can be pasted straight in. Import merges another rater's CSV into this view, for example so the lead can see everyone's progress offline.</p>
+  <div class="row" style="justify-content:flex-end"><button class="btn" id="closeData">Done</button></div>
+</dialog>
+
+<script>
+const DATA = {"segments":[{"n":1,"code":"BWY 06–07 E","street":"Broadway","between":"6th – 7th","side":"E","flag":false,"route":"A","walk":1},{"n":2,"code":"BWY 07–08 E","street":"Broadway","between":"7th – 8th","side":"E","flag":false,"route":"A","walk":2},{"n":3,"code":"BWY 08–09 E","street":"Broadway","between":"8th – 9th","side":"E","flag":false,"route":"A","walk":3},{"n":4,"code":"BWY 09–10 E","street":"Broadway","between":"9th – 10th","side":"E","flag":false,"route":"A","walk":4},{"n":5,"code":"BWY 10–11 E","street":"Broadway","between":"10th – 11th","side":"E","flag":false,"route":"A","walk":5},{"n":6,"code":"BWY 11–12 E","street":"Broadway","between":"11th – 12th","side":"E","flag":false,"route":"A","walk":6},{"n":7,"code":"FRK 06–07 W","street":"Franklin St","between":"6th – 7th","side":"W","flag":false,"route":"A","walk":7},{"n":8,"code":"FRK 06–07 E","street":"Franklin St","between":"6th – 7th","side":"E","flag":false,"route":"A","walk":18},{"n":9,"code":"FRK 07–08 W","street":"Franklin St","between":"7th – 8th","side":"W","flag":false,"route":"A","walk":8},{"n":10,"code":"FRK 07–08 E","street":"Franklin St","between":"7th – 8th","side":"E","flag":false,"route":"A","walk":17},{"n":11,"code":"FRK 08–09 W","street":"Franklin St","between":"8th – 9th","side":"W","flag":false,"route":"A","walk":9},{"n":12,"code":"FRK 08–09 E","street":"Franklin St","between":"8th – 9th","side":"E","flag":false,"route":"A","walk":16},{"n":13,"code":"FRK 09–10 W","street":"Franklin St","between":"9th – 10th","side":"W","flag":false,"route":"A","walk":10},{"n":14,"code":"FRK 09–10 E","street":"Franklin St","between":"9th – 10th","side":"E","flag":false,"route":"A","walk":15},{"n":15,"code":"FRK 10–11 W","street":"Franklin St","between":"10th – 11th","side":"W","flag":false,"route":"A","walk":11},{"n":16,"code":"FRK 10–11 E","street":"Franklin St","between":"10th – 11th","side":"E","flag":false,"route":"A","walk":14},{"n":17,"code":"FRK 11–12 W","street":"Franklin St","between":"11th – 12th","side":"W","flag":false,"route":"A","walk":12},{"n":18,"code":"FRK 11–12 E","street":"Franklin St","between":"11th – 12th","side":"E","flag":false,"route":"A","walk":13},{"n":19,"code":"WEB 06–07 W","street":"Webster St","between":"6th – 7th","side":"W","flag":true,"route":"B","walk":1},{"n":20,"code":"WEB 06–07 E","street":"Webster St","between":"6th – 7th","side":"E","flag":true,"route":"B","walk":12},{"n":21,"code":"WEB 07–08 W","street":"Webster St","between":"7th – 8th","side":"W","flag":false,"route":"B","walk":2},{"n":22,"code":"WEB 07–08 E","street":"Webster St","between":"7th – 8th","side":"E","flag":false,"route":"B","walk":11},{"n":23,"code":"WEB 08–09 W","street":"Webster St","between":"8th – 9th","side":"W","flag":false,"route":"B","walk":3},{"n":24,"code":"WEB 08–09 E","street":"Webster St","between":"8th – 9th","side":"E","flag":false,"route":"B","walk":10},{"n":25,"code":"WEB 09–10 W","street":"Webster St","between":"9th – 10th","side":"W","flag":false,"route":"B","walk":4},{"n":26,"code":"WEB 09–10 E","street":"Webster St","between":"9th – 10th","side":"E","flag":false,"route":"B","walk":9},{"n":27,"code":"WEB 10–11 W","street":"Webster St","between":"10th – 11th","side":"W","flag":false,"route":"B","walk":5},{"n":28,"code":"WEB 10–11 E","street":"Webster St","between":"10th – 11th","side":"E","flag":false,"route":"B","walk":8},{"n":29,"code":"WEB 11–12 W","street":"Webster St","between":"11th – 12th","side":"W","flag":false,"route":"B","walk":6},{"n":30,"code":"WEB 11–12 E","street":"Webster St","between":"11th – 12th","side":"E","flag":false,"route":"B","walk":7},{"n":31,"code":"HAR 06–07 W","street":"Harrison St","between":"6th – 7th","side":"W","flag":true,"route":"B","walk":13},{"n":32,"code":"HAR 06–07 E","street":"Harrison St","between":"6th – 7th","side":"E","flag":true,"route":"B","walk":24},{"n":33,"code":"HAR 07–08 W","street":"Harrison St","between":"7th – 8th","side":"W","flag":false,"route":"B","walk":14},{"n":34,"code":"HAR 07–08 E","street":"Harrison St","between":"7th – 8th","side":"E","flag":false,"route":"B","walk":23},{"n":35,"code":"HAR 08–09 W","street":"Harrison St","between":"8th – 9th","side":"W","flag":false,"route":"B","walk":15},{"n":36,"code":"HAR 08–09 E","street":"Harrison St","between":"8th – 9th","side":"E","flag":false,"route":"B","walk":22},{"n":37,"code":"HAR 09–10 W","street":"Harrison St","between":"9th – 10th","side":"W","flag":false,"route":"B","walk":16},{"n":38,"code":"HAR 09–10 E","street":"Harrison St","between":"9th – 10th","side":"E","flag":false,"route":"B","walk":21},{"n":39,"code":"HAR 10–11 W","street":"Harrison St","between":"10th – 11th","side":"W","flag":false,"route":"B","walk":17},{"n":40,"code":"HAR 10–11 E","street":"Harrison St","between":"10th – 11th","side":"E","flag":false,"route":"B","walk":20},{"n":41,"code":"HAR 11–12 W","street":"Harrison St","between":"11th – 12th","side":"W","flag":false,"route":"B","walk":18},{"n":42,"code":"HAR 11–12 E","street":"Harrison St","between":"11th – 12th","side":"E","flag":false,"route":"B","walk":19},{"n":43,"code":"ALI 06–07 W","street":"Alice St","between":"6th – 7th","side":"W","flag":false,"route":"C","walk":1},{"n":44,"code":"ALI 06–07 E","street":"Alice St","between":"6th – 7th","side":"E","flag":false,"route":"C","walk":12},{"n":45,"code":"ALI 07–08 W","street":"Alice St","between":"7th – 8th","side":"W","flag":false,"route":"C","walk":2},{"n":46,"code":"ALI 07–08 E","street":"Alice St","between":"7th – 8th","side":"E","flag":false,"route":"C","walk":11},{"n":47,"code":"ALI 08–09 W","street":"Alice St","between":"8th – 9th","side":"W","flag":false,"route":"C","walk":3},{"n":48,"code":"ALI 08–09 E","street":"Alice St","between":"8th – 9th","side":"E","flag":false,"route":"C","walk":10},{"n":49,"code":"ALI 09–10 W","street":"Alice St","between":"9th – 10th","side":"W","flag":false,"route":"C","walk":4},{"n":50,"code":"ALI 09–10 E","street":"Alice St","between":"9th – 10th","side":"E","flag":false,"route":"C","walk":9},{"n":51,"code":"ALI 10–11 W","street":"Alice St","between":"10th – 11th","side":"W","flag":false,"route":"C","walk":5},{"n":52,"code":"ALI 10–11 E","street":"Alice St","between":"10th – 11th","side":"E","flag":false,"route":"C","walk":8},{"n":53,"code":"ALI 11–12 W","street":"Alice St","between":"11th – 12th","side":"W","flag":false,"route":"C","walk":6},{"n":54,"code":"ALI 11–12 E","street":"Alice St","between":"11th – 12th","side":"E","flag":false,"route":"C","walk":7},{"n":55,"code":"JAC 06–07 W","street":"Jackson St","between":"6th – 7th","side":"W","flag":true,"route":"C","walk":13},{"n":56,"code":"JAC 06–07 E","street":"Jackson St","between":"6th – 7th","side":"E","flag":true,"route":"C","walk":24},{"n":57,"code":"JAC 07–08 W","street":"Jackson St","between":"7th – 8th","side":"W","flag":false,"route":"C","walk":14},{"n":58,"code":"JAC 07–08 E","street":"Jackson St","between":"7th – 8th","side":"E","flag":false,"route":"C","walk":23},{"n":59,"code":"JAC 08–09 W","street":"Jackson St","between":"8th – 9th","side":"W","flag":false,"route":"C","walk":15},{"n":60,"code":"JAC 08–09 E","street":"Jackson St","between":"8th – 9th","side":"E","flag":false,"route":"C","walk":22},{"n":61,"code":"JAC 09–10 W","street":"Jackson St","between":"9th – 10th","side":"W","flag":false,"route":"C","walk":16},{"n":62,"code":"JAC 09–10 E","street":"Jackson St","between":"9th – 10th","side":"E","flag":false,"route":"C","walk":21},{"n":63,"code":"JAC 10–11 W","street":"Jackson St","between":"10th – 11th","side":"W","flag":false,"route":"C","walk":17},{"n":64,"code":"JAC 10–11 E","street":"Jackson St","between":"10th – 11th","side":"E","flag":false,"route":"C","walk":20},{"n":65,"code":"JAC 11–12 W","street":"Jackson St","between":"11th – 12th","side":"W","flag":false,"route":"C","walk":18},{"n":66,"code":"JAC 11–12 E","street":"Jackson St","between":"11th – 12th","side":"E","flag":false,"route":"C","walk":19},{"n":67,"code":"MAD 06–07 W","street":"Madison St","between":"6th – 7th","side":"W","flag":false,"route":"D","walk":1},{"n":68,"code":"MAD 06–07 E","street":"Madison St","between":"6th – 7th","side":"E","flag":false,"route":"D","walk":12},{"n":69,"code":"MAD 07–08 W","street":"Madison St","between":"7th – 8th","side":"W","flag":false,"route":"D","walk":2},{"n":70,"code":"MAD 07–08 E","street":"Madison St","between":"7th – 8th","side":"E","flag":false,"route":"D","walk":11},{"n":71,"code":"MAD 08–09 W","street":"Madison St","between":"8th – 9th","side":"W","flag":false,"route":"D","walk":3},{"n":72,"code":"MAD 08–09 E","street":"Madison St","between":"8th – 9th","side":"E","flag":false,"route":"D","walk":10},{"n":73,"code":"MAD 09–10 W","street":"Madison St","between":"9th – 10th","side":"W","flag":false,"route":"D","walk":4},{"n":74,"code":"MAD 09–10 E","street":"Madison St","between":"9th – 10th","side":"E","flag":false,"route":"D","walk":9},{"n":75,"code":"MAD 10–11 W","street":"Madison St","between":"10th – 11th","side":"W","flag":false,"route":"D","walk":5},{"n":76,"code":"MAD 10–11 E","street":"Madison St","between":"10th – 11th","side":"E","flag":false,"route":"D","walk":8},{"n":77,"code":"MAD 11–12 W","street":"Madison St","between":"11th – 12th","side":"W","flag":false,"route":"D","walk":6},{"n":78,"code":"MAD 11–12 E","street":"Madison St","between":"11th – 12th","side":"E","flag":false,"route":"D","walk":7},{"n":79,"code":"OAK 06–07 W","street":"Oak St","between":"6th – 7th","side":"W","flag":false,"route":"D","walk":13},{"n":80,"code":"OAK 06–07 E","street":"Oak St","between":"6th – 7th","side":"E","flag":false,"route":"D","walk":24},{"n":81,"code":"OAK 07–08 W","street":"Oak St","between":"7th – 8th","side":"W","flag":false,"route":"D","walk":14},{"n":82,"code":"OAK 07–08 E","street":"Oak St","between":"7th – 8th","side":"E","flag":false,"route":"D","walk":23},{"n":83,"code":"OAK 08–09 W","street":"Oak St","between":"8th – 9th","side":"W","flag":false,"route":"D","walk":15},{"n":84,"code":"OAK 08–09 E","street":"Oak St","between":"8th – 9th","side":"E","flag":false,"route":"D","walk":22},{"n":85,"code":"OAK 09–10 W","street":"Oak St","between":"9th – 10th","side":"W","flag":false,"route":"D","walk":16},{"n":86,"code":"OAK 09–10 E","street":"Oak St","between":"9th – 10th","side":"E","flag":false,"route":"D","walk":21},{"n":87,"code":"OAK 10–11 W","street":"Oak St","between":"10th – 11th","side":"W","flag":false,"route":"D","walk":17},{"n":88,"code":"OAK 10–11 E","street":"Oak St","between":"10th – 11th","side":"E","flag":false,"route":"D","walk":20},{"n":89,"code":"OAK 11–12 W","street":"Oak St","between":"11th – 12th","side":"W","flag":false,"route":"D","walk":18},{"n":90,"code":"OAK 11–12 E","street":"Oak St","between":"11th – 12th","side":"E","flag":false,"route":"D","walk":19},{"n":91,"code":"FAL 06–07 W","street":"Fallon St","between":"6th – 7th","side":"W","flag":true,"route":"E","walk":9},{"n":92,"code":"FAL 07–08 W","street":"Fallon St","between":"7th – 8th","side":"W","flag":true,"route":"E","walk":10},{"n":93,"code":"FAL 08–09 W","street":"Fallon St","between":"8th – 9th","side":"W","flag":true,"route":"E","walk":11},{"n":94,"code":"FAL 09–10 W","street":"Fallon St","between":"9th – 10th","side":"W","flag":true,"route":"E","walk":12},{"n":95,"code":"FAL 10–11 W","street":"Fallon St","between":"10th – 11th","side":"W","flag":true,"route":"E","walk":13},{"n":96,"code":"FAL 11–12 W","street":"Fallon St","between":"11th – 12th","side":"W","flag":true,"route":"E","walk":14},{"n":97,"code":"6TH BWY–FRK N","street":"6th St","between":"Broadway – Franklin","side":"N","flag":true,"route":"E","walk":1},{"n":98,"code":"6TH FRK–WEB N","street":"6th St","between":"Franklin – Webster","side":"N","flag":true,"route":"E","walk":2},{"n":99,"code":"6TH WEB–HAR N","street":"6th St","between":"Webster – Harrison","side":"N","flag":true,"route":"E","walk":3},{"n":100,"code":"6TH HAR–ALI N","street":"6th St","between":"Harrison – Alice","side":"N","flag":true,"route":"E","walk":4},{"n":101,"code":"6TH ALI–JAC N","street":"6th St","between":"Alice – Jackson","side":"N","flag":true,"route":"E","walk":5},{"n":102,"code":"6TH JAC–MAD N","street":"6th St","between":"Jackson – Madison","side":"N","flag":true,"route":"E","walk":6},{"n":103,"code":"6TH MAD–OAK N","street":"6th St","between":"Madison – Oak","side":"N","flag":true,"route":"E","walk":7},{"n":104,"code":"6TH OAK–FAL N","street":"6th St","between":"Oak – Fallon","side":"N","flag":true,"route":"E","walk":8},{"n":105,"code":"7TH BWY–FRK S","street":"7th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"F","walk":1},{"n":106,"code":"7TH BWY–FRK N","street":"7th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"F","walk":16},{"n":107,"code":"7TH FRK–WEB S","street":"7th St","between":"Franklin – Webster","side":"S","flag":false,"route":"F","walk":2},{"n":108,"code":"7TH FRK–WEB N","street":"7th St","between":"Franklin – Webster","side":"N","flag":false,"route":"F","walk":15},{"n":109,"code":"7TH WEB–HAR S","street":"7th St","between":"Webster – Harrison","side":"S","flag":false,"route":"F","walk":3},{"n":110,"code":"7TH WEB–HAR N","street":"7th St","between":"Webster – Harrison","side":"N","flag":false,"route":"F","walk":14},{"n":111,"code":"7TH HAR–ALI S","street":"7th St","between":"Harrison – Alice","side":"S","flag":false,"route":"F","walk":4},{"n":112,"code":"7TH HAR–ALI N","street":"7th St","between":"Harrison – Alice","side":"N","flag":false,"route":"F","walk":13},{"n":113,"code":"7TH ALI–JAC S","street":"7th St","between":"Alice – Jackson","side":"S","flag":false,"route":"F","walk":5},{"n":114,"code":"7TH ALI–JAC N","street":"7th St","between":"Alice – Jackson","side":"N","flag":false,"route":"F","walk":12},{"n":115,"code":"7TH JAC–MAD S","street":"7th St","between":"Jackson – Madison","side":"S","flag":false,"route":"F","walk":6},{"n":116,"code":"7TH JAC–MAD N","street":"7th St","between":"Jackson – Madison","side":"N","flag":false,"route":"F","walk":11},{"n":117,"code":"7TH MAD–OAK S","street":"7th St","between":"Madison – Oak","side":"S","flag":false,"route":"F","walk":7},{"n":118,"code":"7TH MAD–OAK N","street":"7th St","between":"Madison – Oak","side":"N","flag":false,"route":"F","walk":10},{"n":119,"code":"7TH OAK–FAL S","street":"7th St","between":"Oak – Fallon","side":"S","flag":true,"route":"F","walk":8},{"n":120,"code":"7TH OAK–FAL N","street":"7th St","between":"Oak – Fallon","side":"N","flag":true,"route":"F","walk":9},{"n":121,"code":"8TH BWY–FRK S","street":"8th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"G","walk":1},{"n":122,"code":"8TH BWY–FRK N","street":"8th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"G","walk":16},{"n":123,"code":"8TH FRK–WEB S","street":"8th St","between":"Franklin – Webster","side":"S","flag":false,"route":"G","walk":2},{"n":124,"code":"8TH FRK–WEB N","street":"8th St","between":"Franklin – Webster","side":"N","flag":false,"route":"G","walk":15},{"n":125,"code":"8TH WEB–HAR S","street":"8th St","between":"Webster – Harrison","side":"S","flag":false,"route":"G","walk":3},{"n":126,"code":"8TH WEB–HAR N","street":"8th St","between":"Webster – Harrison","side":"N","flag":false,"route":"G","walk":14},{"n":127,"code":"8TH HAR–ALI S","street":"8th St","between":"Harrison – Alice","side":"S","flag":false,"route":"G","walk":4},{"n":128,"code":"8TH HAR–ALI N","street":"8th St","between":"Harrison – Alice","side":"N","flag":false,"route":"G","walk":13},{"n":129,"code":"8TH ALI–JAC S","street":"8th St","between":"Alice – Jackson","side":"S","flag":false,"route":"G","walk":5},{"n":130,"code":"8TH ALI–JAC N","street":"8th St","between":"Alice – Jackson","side":"N","flag":false,"route":"G","walk":12},{"n":131,"code":"8TH JAC–MAD S","street":"8th St","between":"Jackson – Madison","side":"S","flag":false,"route":"G","walk":6},{"n":132,"code":"8TH JAC–MAD N","street":"8th St","between":"Jackson – Madison","side":"N","flag":false,"route":"G","walk":11},{"n":133,"code":"8TH MAD–OAK S","street":"8th St","between":"Madison – Oak","side":"S","flag":false,"route":"G","walk":7},{"n":134,"code":"8TH MAD–OAK N","street":"8th St","between":"Madison – Oak","side":"N","flag":false,"route":"G","walk":10},{"n":135,"code":"8TH OAK–FAL S","street":"8th St","between":"Oak – Fallon","side":"S","flag":false,"route":"G","walk":8},{"n":136,"code":"8TH OAK–FAL N","street":"8th St","between":"Oak – Fallon","side":"N","flag":false,"route":"G","walk":9},{"n":137,"code":"9TH BWY–FRK S","street":"9th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"H","walk":1},{"n":138,"code":"9TH BWY–FRK N","street":"9th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"H","walk":16},{"n":139,"code":"9TH FRK–WEB S","street":"9th St","between":"Franklin – Webster","side":"S","flag":false,"route":"H","walk":2},{"n":140,"code":"9TH FRK–WEB N","street":"9th St","between":"Franklin – Webster","side":"N","flag":false,"route":"H","walk":15},{"n":141,"code":"9TH WEB–HAR S","street":"9th St","between":"Webster – Harrison","side":"S","flag":false,"route":"H","walk":3},{"n":142,"code":"9TH WEB–HAR N","street":"9th St","between":"Webster – Harrison","side":"N","flag":false,"route":"H","walk":14},{"n":143,"code":"9TH HAR–ALI S","street":"9th St","between":"Harrison – Alice","side":"S","flag":false,"route":"H","walk":4},{"n":144,"code":"9TH HAR–ALI N","street":"9th St","between":"Harrison – Alice","side":"N","flag":false,"route":"H","walk":13},{"n":145,"code":"9TH ALI–JAC S","street":"9th St","between":"Alice – Jackson","side":"S","flag":false,"route":"H","walk":5},{"n":146,"code":"9TH ALI–JAC N","street":"9th St","between":"Alice – Jackson","side":"N","flag":false,"route":"H","walk":12},{"n":147,"code":"9TH JAC–MAD S","street":"9th St","between":"Jackson – Madison","side":"S","flag":false,"route":"H","walk":6},{"n":148,"code":"9TH JAC–MAD N","street":"9th St","between":"Jackson – Madison","side":"N","flag":false,"route":"H","walk":11},{"n":149,"code":"9TH MAD–OAK S","street":"9th St","between":"Madison – Oak","side":"S","flag":false,"route":"H","walk":7},{"n":150,"code":"9TH MAD–OAK N","street":"9th St","between":"Madison – Oak","side":"N","flag":false,"route":"H","walk":10},{"n":151,"code":"9TH OAK–FAL S","street":"9th St","between":"Oak – Fallon","side":"S","flag":false,"route":"H","walk":8},{"n":152,"code":"9TH OAK–FAL N","street":"9th St","between":"Oak – Fallon","side":"N","flag":false,"route":"H","walk":9},{"n":153,"code":"10TH BWY–FRK S","street":"10th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"I","walk":1},{"n":154,"code":"10TH BWY–FRK N","street":"10th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"I","walk":16},{"n":155,"code":"10TH FRK–WEB S","street":"10th St","between":"Franklin – Webster","side":"S","flag":false,"route":"I","walk":2},{"n":156,"code":"10TH FRK–WEB N","street":"10th St","between":"Franklin – Webster","side":"N","flag":false,"route":"I","walk":15},{"n":157,"code":"10TH WEB–HAR S","street":"10th St","between":"Webster – Harrison","side":"S","flag":false,"route":"I","walk":3},{"n":158,"code":"10TH WEB–HAR N","street":"10th St","between":"Webster – Harrison","side":"N","flag":false,"route":"I","walk":14},{"n":159,"code":"10TH HAR–ALI S","street":"10th St","between":"Harrison – Alice","side":"S","flag":false,"route":"I","walk":4},{"n":160,"code":"10TH HAR–ALI N","street":"10th St","between":"Harrison – Alice","side":"N","flag":false,"route":"I","walk":13},{"n":161,"code":"10TH ALI–JAC S","street":"10th St","between":"Alice – Jackson","side":"S","flag":false,"route":"I","walk":5},{"n":162,"code":"10TH ALI–JAC N","street":"10th St","between":"Alice – Jackson","side":"N","flag":false,"route":"I","walk":12},{"n":163,"code":"10TH JAC–MAD S","street":"10th St","between":"Jackson – Madison","side":"S","flag":false,"route":"I","walk":6},{"n":164,"code":"10TH JAC–MAD N","street":"10th St","between":"Jackson – Madison","side":"N","flag":false,"route":"I","walk":11},{"n":165,"code":"10TH MAD–OAK S","street":"10th St","between":"Madison – Oak","side":"S","flag":false,"route":"I","walk":7},{"n":166,"code":"10TH MAD–OAK N","street":"10th St","between":"Madison – Oak","side":"N","flag":false,"route":"I","walk":10},{"n":167,"code":"10TH OAK–FAL S","street":"10th St","between":"Oak – Fallon","side":"S","flag":false,"route":"I","walk":8},{"n":168,"code":"10TH OAK–FAL N","street":"10th St","between":"Oak – Fallon","side":"N","flag":false,"route":"I","walk":9},{"n":169,"code":"11TH BWY–FRK S","street":"11th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"J","walk":1},{"n":170,"code":"11TH BWY–FRK N","street":"11th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"J","walk":16},{"n":171,"code":"11TH FRK–WEB S","street":"11th St","between":"Franklin – Webster","side":"S","flag":false,"route":"J","walk":2},{"n":172,"code":"11TH FRK–WEB N","street":"11th St","between":"Franklin – Webster","side":"N","flag":false,"route":"J","walk":15},{"n":173,"code":"11TH WEB–HAR S","street":"11th St","between":"Webster – Harrison","side":"S","flag":false,"route":"J","walk":3},{"n":174,"code":"11TH WEB–HAR N","street":"11th St","between":"Webster – Harrison","side":"N","flag":false,"route":"J","walk":14},{"n":175,"code":"11TH HAR–ALI S","street":"11th St","between":"Harrison – Alice","side":"S","flag":false,"route":"J","walk":4},{"n":176,"code":"11TH HAR–ALI N","street":"11th St","between":"Harrison – Alice","side":"N","flag":false,"route":"J","walk":13},{"n":177,"code":"11TH ALI–JAC S","street":"11th St","between":"Alice – Jackson","side":"S","flag":false,"route":"J","walk":5},{"n":178,"code":"11TH ALI–JAC N","street":"11th St","between":"Alice – Jackson","side":"N","flag":false,"route":"J","walk":12},{"n":179,"code":"11TH JAC–MAD S","street":"11th St","between":"Jackson – Madison","side":"S","flag":false,"route":"J","walk":6},{"n":180,"code":"11TH JAC–MAD N","street":"11th St","between":"Jackson – Madison","side":"N","flag":false,"route":"J","walk":11},{"n":181,"code":"11TH MAD–OAK S","street":"11th St","between":"Madison – Oak","side":"S","flag":false,"route":"J","walk":7},{"n":182,"code":"11TH MAD–OAK N","street":"11th St","between":"Madison – Oak","side":"N","flag":false,"route":"J","walk":10},{"n":183,"code":"11TH OAK–FAL S","street":"11th St","between":"Oak – Fallon","side":"S","flag":false,"route":"J","walk":8},{"n":184,"code":"11TH OAK–FAL N","street":"11th St","between":"Oak – Fallon","side":"N","flag":false,"route":"J","walk":9},{"n":185,"code":"12TH BWY–FRK S","street":"12th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"J","walk":17},{"n":186,"code":"12TH FRK–WEB S","street":"12th St","between":"Franklin – Webster","side":"S","flag":false,"route":"J","walk":18},{"n":187,"code":"12TH WEB–HAR S","street":"12th St","between":"Webster – Harrison","side":"S","flag":false,"route":"J","walk":19},{"n":188,"code":"12TH HAR–ALI S","street":"12th St","between":"Harrison – Alice","side":"S","flag":false,"route":"J","walk":20},{"n":189,"code":"12TH ALI–JAC S","street":"12th St","between":"Alice – Jackson","side":"S","flag":false,"route":"J","walk":21},{"n":190,"code":"12TH JAC–MAD S","street":"12th St","between":"Jackson – Madison","side":"S","flag":false,"route":"J","walk":22},{"n":191,"code":"12TH MAD–OAK S","street":"12th St","between":"Madison – Oak","side":"S","flag":false,"route":"J","walk":23},{"n":192,"code":"12TH OAK–FAL S","street":"12th St","between":"Oak – Fallon","side":"S","flag":false,"route":"J","walk":24}],"routes":[{"id":"A","name":"Broadway and Franklin","order":[1,2,3,4,5,6,7,9,11,13,15,17,18,16,14,12,10,8]},{"id":"B","name":"Webster and Harrison","order":[19,21,23,25,27,29,30,28,26,24,22,20,31,33,35,37,39,41,42,40,38,36,34,32]},{"id":"C","name":"Alice and Jackson","order":[43,45,47,49,51,53,54,52,50,48,46,44,55,57,59,61,63,65,66,64,62,60,58,56]},{"id":"D","name":"Madison and Oak","order":[67,69,71,73,75,77,78,76,74,72,70,68,79,81,83,85,87,89,90,88,86,84,82,80]},{"id":"E","name":"6th St and Fallon","order":[97,98,99,100,101,102,103,104,91,92,93,94,95,96]},{"id":"F","name":"7th St","order":[105,107,109,111,113,115,117,119,120,118,116,114,112,110,108,106]},{"id":"G","name":"8th St","order":[121,123,125,127,129,131,133,135,136,134,132,130,128,126,124,122]},{"id":"H","name":"9th St","order":[137,139,141,143,145,147,149,151,152,150,148,146,144,142,140,138]},{"id":"I","name":"10th St","order":[153,155,157,159,161,163,165,167,168,166,164,162,160,158,156,154]},{"id":"J","name":"11th and 12th St","order":[169,171,173,175,177,179,181,183,184,182,180,178,176,174,172,170,185,186,187,188,189,190,191,192]}]};
+const COLS = ["seg_num", "seg_code", "route", "walk_stop", "street", "between", "side", "gsv_link", "rater", "audit_date", "image_date", "minutes", "view_quality", "obs_parked_cars", "obs_trucks", "obs_traffic", "obs_trees", "obs_scaffolding", "obs_weather_shade", "no_sidewalk", "q4_footpath", "q4_paved_trail", "q4_sidewalk", "q4_ped_street", "q4_cant_tell", "q5_asphalt", "q5_concrete", "q5_brick_stone", "q5_gravel", "q5_dirt_sand", "q5_cant_tell", "q6_condition", "q7_poles_signs", "q7_parked_cars", "q7_greenery", "q7_garbage_cans", "q7_other", "q7_none", "q7_cant_tell", "q8_fence", "q8_trees", "q8_hedges", "q8_landscape", "q8_grass", "q8_none", "q8_cant_tell", "q9_dist_from_curb", "q10_width", "q11_curb_cuts", "q12_complete", "q13_connections", "note"];
+const GS_CODE = "/**\n * Chinatown sidewalk audit \u2014 team sheet connector (Google Apps Script), version 4.\n * One connector serves both tools: the Street View audit and the field audit.\n *\n * Setup: open your Google Sheet > Extensions > Apps Script, paste this code, save.\n * Pick testSetup next to Run, click Run, and approve the permissions (Sheets + Drive, for photos).\n * Deploy > New deployment > Web app, Execute as: Me, Who has access: Anyone.\n * Updating: paste, save, then Deploy > Manage deployments > edit > Version: New version > Deploy.\n *\n * Tabs it keeps:\n *   GSV entries    columns A:AZ match the GSV Data sheet in the Street View workbook\n *   Field entries  columns A:AL match the Data sheet in the field workbook; then visit, photos, status, received_at\n *   Photos         one row per photo, with a link to the file in Drive\n * Photos are saved in a Drive folder named \"<sheet name> photos\", file names start with the segment code.\n */\nvar GSV_COLS = [\"seg_num\", \"seg_code\", \"route\", \"walk_stop\", \"street\", \"between\", \"side\", \"gsv_link\", \"rater\", \"audit_date\", \"image_date\", \"minutes\", \"view_quality\", \"obs_parked_cars\", \"obs_trucks\", \"obs_traffic\", \"obs_trees\", \"obs_scaffolding\", \"obs_weather_shade\", \"no_sidewalk\", \"q4_footpath\", \"q4_paved_trail\", \"q4_sidewalk\", \"q4_ped_street\", \"q4_cant_tell\", \"q5_asphalt\", \"q5_concrete\", \"q5_brick_stone\", \"q5_gravel\", \"q5_dirt_sand\", \"q5_cant_tell\", \"q6_condition\", \"q7_poles_signs\", \"q7_parked_cars\", \"q7_greenery\", \"q7_garbage_cans\", \"q7_other\", \"q7_none\", \"q7_cant_tell\", \"q8_fence\", \"q8_trees\", \"q8_hedges\", \"q8_landscape\", \"q8_grass\", \"q8_none\", \"q8_cant_tell\", \"q9_dist_from_curb\", \"q10_width\", \"q11_curb_cuts\", \"q12_complete\", \"q13_connections\", \"note\"];\nvar FIELD_COLS = [\"seg_num\", \"seg_code\", \"route\", \"walk_stop\", \"street\", \"between\", \"side\", \"rater\", \"saved_at\", \"no_sidewalk\", \"q4_footpath\", \"q4_paved_trail\", \"q4_sidewalk\", \"q4_ped_street\", \"q5_asphalt\", \"q5_concrete\", \"q5_brick_stone\", \"q5_gravel\", \"q5_dirt_sand\", \"q6_condition\", \"q7_poles_signs\", \"q7_parked_cars\", \"q7_greenery\", \"q7_garbage_cans\", \"q7_other\", \"q7_none\", \"q8_fence\", \"q8_trees\", \"q8_hedges\", \"q8_landscape\", \"q8_grass\", \"q8_none\", \"q9_dist_from_curb\", \"q10_width\", \"q11_curb_cuts\", \"q12_complete\", \"q13_connections\", \"note\"];\nvar PHOTO_COLS = ['filename', 'seg_code', 'rater', 'visit', 'photo_num', 'caption', 'taken_at', 'lat', 'lon', 'drive_url', 'received_at'];\nvar KINDS = {\n  gsv:   {tab: 'GSV entries',   cols: GSV_COLS,   extra: ['status', 'received_at'],                     key: ['seg_code', 'rater']},\n  field: {tab: 'Field entries', cols: FIELD_COLS, extra: ['visit', 'photos', 'status', 'received_at'], key: ['seg_code', 'rater', 'visit']}\n};\nvar VERSION = 4;\n\nfunction ss_() {\n  var ss = SpreadsheetApp.getActiveSpreadsheet();\n  if (!ss) throw new Error(\"This script isn't attached to a Google Sheet. Open your Google Sheet, choose Extensions > Apps Script, and paste the code there.\");\n  return ss;\n}\n\nfunction tab_(name, header) {\n  var ss = ss_();\n  var sh = ss.getSheetByName(name);\n  if (!sh) {\n    sh = ss.insertSheet(name);\n    sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold');\n    sh.setFrozenRows(1);\n    sh.setFrozenColumns(2);\n  }\n  return sh;\n}\nfunction kindTab_(k) { var K = KINDS[k]; return tab_(K.tab, K.cols.concat(K.extra)); }\nfunction photoTab_() { return tab_('Photos', PHOTO_COLS); }\n\nfunction photoFolder_() {\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('PHOTO_FOLDER_ID');\n  if (id) { try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }\n  var folder = DriveApp.createFolder(ss_().getName() + ' photos');\n  props.setProperty('PHOTO_FOLDER_ID', folder.getId());\n  return folder;\n}\n\nfunction json_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction clean_(v) {\n  if (v === undefined || v === null) return '';\n  if (typeof v === 'number') return v;\n  v = String(v).slice(0, 2000);\n  return /^[=+\\-@]/.test(v) ? \"'\" + v : v;   // never let text become a formula\n}\n\nfunction isTestRater_(r) { r = String(r); return r === '__setup_test__' || / \\(TEST\\)$/.test(r); }\n\n/** Finds the data row (2-based sheet row) whose key columns match, or 0. */\nfunction findRow_(sh, header, keyNames, d) {\n  var last = sh.getLastRow();\n  if (last < 2) return 0;\n  var idx = keyNames.map(function (k) { return header.indexOf(k); });\n  var vals = sh.getRange(2, 1, last - 1, header.length).getValues();\n  for (var i = 0; i < vals.length; i++) {\n    var hit = true;\n    for (var j = 0; j < idx.length; j++) {\n      if (String(vals[i][idx[j]]) !== String(d[keyNames[j]] === undefined ? '' : d[keyNames[j]])) { hit = false; break; }\n    }\n    if (hit) return i + 2;\n  }\n  return 0;\n}\n\nfunction statusOf_(d) {\n  if (Number(d.view_quality) === 3) return 'Not viewable';\n  if (Number(d.no_sidewalk) === 1) return 'No sidewalk';\n  return 'Complete';\n}\n\nfunction saveEntry_(kind, d) {\n  var K = KINDS[kind];\n  if (typeof d.seg_code !== 'string' || !d.seg_code || d.seg_code.length > 40 || typeof d.rater !== 'string' || !d.rater) {\n    return {ok: false, error: 'Missing segment code or rater'};\n  }\n  var sh = kindTab_(kind);\n  var header = K.cols.concat(K.extra);\n  var target = findRow_(sh, header, K.key, d);\n  var row = K.cols.map(function (c) { return clean_(d[c]); });\n  var extra = {visit: clean_(d.visit), photos: clean_(d.photos), status: statusOf_(d), received_at: new Date().toISOString()};\n  K.extra.forEach(function (c) { row.push(extra[c]); });\n  if (target) sh.getRange(target, 1, 1, row.length).setValues([row]);\n  else sh.appendRow(row);\n  return {ok: true, replaced: !!target};\n}\n\nfunction savePhoto_(d) {\n  if (!d.filename || !/^[A-Za-z0-9_.\\-]+\\.(jpg|jpeg|png)$/i.test(d.filename) || !d.data || !d.seg_code || !d.rater) {\n    return {ok: false, error: 'Photo is missing its file name, data, segment or rater'};\n  }\n  var folder = photoFolder_();\n  var old = folder.getFilesByName(d.filename);\n  while (old.hasNext()) old.next().setTrashed(true);\n  var blob = Utilities.newBlob(Utilities.base64Decode(d.data), d.mime || 'image/jpeg', d.filename);\n  var file = folder.createFile(blob);\n  var sh = photoTab_();\n  var row = [d.filename, d.seg_code, d.rater, d.visit, d.photo_num, d.caption, d.taken_at, d.lat, d.lon, file.getUrl(), new Date().toISOString()].map(clean_);\n  var target = findRow_(sh, PHOTO_COLS, ['filename'], d);\n  if (target) sh.getRange(target, 1, 1, row.length).setValues([row]); else sh.appendRow(row);\n  return {ok: true, url: file.getUrl(), id: file.getId()};\n}\n\nfunction deletePhoto_(d) {\n  if (!d.filename) return {ok: false, error: 'No file name'};\n  var folder = photoFolder_(), n = 0;\n  var it = folder.getFilesByName(d.filename);\n  while (it.hasNext()) { it.next().setTrashed(true); n++; }\n  var sh = photoTab_(), target = findRow_(sh, PHOTO_COLS, ['filename'], d);\n  if (target) sh.deleteRow(target);\n  return {ok: true, removed: n};\n}\n\n/** Removes rows and photos made by Check setup and Test mode (rater \"__setup_test__\" or ending in \"(TEST)\"). */\nfunction deleteTestRows_() {\n  var deleted = 0;\n  Object.keys(KINDS).forEach(function (k) {\n    var ss = ss_(), sh = ss.getSheetByName(KINDS[k].tab);\n    if (!sh) return;\n    var header = KINDS[k].cols.concat(KINDS[k].extra), rc = header.indexOf('rater') + 1, last = sh.getLastRow();\n    if (last < 2) return;\n    var raters = sh.getRange(2, rc, last - 1, 1).getValues();\n    for (var i = raters.length - 1; i >= 0; i--) if (isTestRater_(raters[i][0])) { sh.deleteRow(i + 2); deleted++; }\n  });\n  var ph = ss_().getSheetByName('Photos');\n  if (ph && ph.getLastRow() > 1) {\n    var vals = ph.getRange(2, 1, ph.getLastRow() - 1, PHOTO_COLS.length).getValues();\n    var folder = null;\n    for (var i = vals.length - 1; i >= 0; i--) {\n      if (isTestRater_(vals[i][2])) {\n        folder = folder || photoFolder_();\n        var it = folder.getFilesByName(String(vals[i][0]));\n        while (it.hasNext()) it.next().setTrashed(true);\n        ph.deleteRow(i + 2); deleted++;\n      }\n    }\n  }\n  return {ok: true, deleted: deleted};\n}\n\nfunction doPost(e) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);\n  try {\n    var d = JSON.parse(e.postData.contents);\n    if (!d) return json_({ok: false, error: 'Empty request'});\n    if (d._action === 'delete_test') return json_(deleteTestRows_());\n    if (d._action === 'photo') return json_(savePhoto_(d));\n    if (d._action === 'photo_delete') return json_(deletePhoto_(d));\n    var kind = d._kind === 'field' ? 'field' : 'gsv';\n    return json_(saveEntry_(kind, d));\n  } catch (err) {\n    return json_({ok: false, version: VERSION, error: String(err && err.message || err)});\n  } finally {\n    lock.releaseLock();\n  }\n}\n\nfunction doGet(e) {\n  try {\n    var p = (e && e.parameter) || {};\n    var kind = p.kind === 'field' ? 'field' : 'gsv';\n    var K = KINDS[kind], sh = kindTab_(kind), header = K.cols.concat(K.extra);\n    var last = sh.getLastRow(), rows = [];\n    if (p.list && last > 1) {\n      var ci = header.indexOf('seg_code'), ri = header.indexOf('rater'), si = header.indexOf('status'), vi = header.indexOf('visit'), pi = header.indexOf('photos');\n      sh.getRange(2, 1, last - 1, header.length).getValues().forEach(function (r) {\n        var o = {seg_code: r[ci], rater: r[ri], status: r[si]};\n        if (vi >= 0) { o.visit = r[vi]; o.photos = r[pi]; }\n        rows.push(o);\n      });\n    }\n    return json_({ok: true, version: VERSION, kind: kind, count: Math.max(0, last - 1), rows: rows});\n  } catch (err) {\n    return json_({ok: false, version: VERSION, error: String(err && err.message || err)});\n  }\n}\n\n/** Run once from the editor (pick testSetup, click Run) to approve permissions and create the tabs and photo folder. */\nfunction testSetup() {\n  var g = kindTab_('gsv'), f = kindTab_('field'), p = photoTab_(), folder = photoFolder_();\n  Logger.log('Connected to \"' + ss_().getName() + '\". Tabs: ' + [g.getName(), f.getName(), p.getName()].join(', ') + '. Photo folder: ' + folder.getUrl());\n}\n";
+const SEG = {}; DATA.segments.forEach(s => SEG[s.n] = s);
+const BYCODE = {}; DATA.segments.forEach(s => BYCODE[s.code] = s);
+const SIDE = {N:"North",S:"South",E:"East",W:"West"};
+const KEY = "peds-gsv-chinatown-v1";
+
+// ---------- storage ----------
+let store = {entries:{}, settings:{rater:"", url:"", route:"A"}, team:{}};
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.entries) store = Object.assign(store, s); } catch(e) {}
+let storageOk = true;
+function persist(){ try { localStorage.setItem(KEY, JSON.stringify(store)); storageOk = true; } catch(e) { storageOk = false; } }
+
+const raterEl = document.getElementById("rater");
+raterEl.value = store.settings.rater || "";
+raterEl.addEventListener("change", () => { store.settings.rater = raterEl.value.trim(); persist(); setTimeout(() => { renderRail(); updateSync(); }, 300); });
+const baseRater = () => raterEl.value.trim();
+const rater = () => baseRater() ? baseRater() + (store.settings.test ? " (TEST)" : "") : "";
+const isTest = r => / \(TEST\)$/.test(String(r)) || r === "__setup_test__";
+const ekey = (code, r) => code + "|" + r;
+const mine = code => store.entries[ekey(code, rater())];
+
+// ---------- questions ----------
+const Q = [
+  {key:"q4", n:4, t:"Type(s) of pedestrian facility", multi:true, opts:[["footpath","Footpath (worn dirt)"],["paved_trail","Paved trail"],["sidewalk","Sidewalk"],["ped_street","Pedestrian street"]]},
+  {key:"q5", n:5, t:"Path material", multi:true, opts:[["asphalt","Asphalt"],["concrete","Concrete"],["brick_stone","Paving bricks / flat stone"],["gravel","Gravel"],["dirt_sand","Dirt or sand"]]},
+  {key:"q6_condition", n:6, t:"Path condition / maintenance", opts:["Poor (many bumps/cracks/holes)","Fair (some)","Good (very few)","Under repair"]},
+  {key:"q7", n:7, t:"Path obstructions", multi:true, none:"none", opts:[["poles_signs","Poles or signs"],["parked_cars","Parked cars"],["greenery","Greenery"],["garbage_cans","Garbage cans"],["other","Other"],["none","None"]]},
+  {key:"q8", n:8, t:"Buffers between road and path", multi:true, none:"none", opts:[["fence","Fence"],["trees","Trees"],["hedges","Hedges"],["landscape","Landscape"],["grass","Grass"],["none","None"]]},
+  {key:"q9_dist_from_curb", n:9, t:"Path distance from curb", opts:["At edge","Less than 5 ft","More than 5 ft"]},
+  {key:"q10_width", n:10, t:"Sidewalk width", opts:["Less than 4 ft","4 to 8 ft","More than 8 ft"]},
+  {key:"q11_curb_cuts", n:11, t:"Curb cuts", opts:["None","1 to 4","More than 4"]},
+  {key:"q12_complete", n:12, t:"Sidewalk completeness / continuity", opts:["Complete","Incomplete"]},
+];
+const OBS = [["parked_cars","Parked cars"],["trucks","Trucks"],["traffic","Traffic"],["trees","Trees"],["scaffolding","Scaffolding"],["weather_shade","Weather or shade"]];
+const VQ = ["Clear view of the whole block face","Partly blocked","Not viewable / no imagery"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// ---------- map links ----------
+const crossName = x => x === "Broadway" ? "Broadway" : x + " St";
+function corners(s){
+  const [a,b] = s.between.split(" – ");
+  return [a,b].map(x => ({label: crossName(x), url: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${s.street} & ${crossName(x)}, Oakland, CA`)}));
+}
+
+// ---------- rail ----------
+let route = store.settings.route || "A", current = null, form = null, openedAt = 0, timerId = null;
+function statusOf(e){ if(!e) return null; return e.view_quality===3 ? "nv" : "done"; }
+function teamCount(code){ const t = store.team[code]; if(!t) return 0; return Object.keys(t).filter(r => r !== rater() && isTest(r) === !!store.settings.test).length; }
+function setHTML(el, html){ if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+function renderRail(){
+  const rEl = document.getElementById("routes");
+  setHTML(rEl, DATA.routes.map(r => { const d = r.order.filter(n => mine(SEG[n].code)).length;
+    return `<button class="rchip" data-r="${r.id}" aria-pressed="${r.id===route}"><b>${r.id}</b><small>${d}/${r.order.length}</small></button>`; }).join(""));
+  const r = DATA.routes.find(x => x.id === route);
+  const done = r.order.filter(n => mine(SEG[n].code)).length;
+  document.getElementById("rname").textContent = `Route ${r.id} · ${r.name}`;
+  document.getElementById("rprog").textContent = `${done} of ${r.order.length} rated by you`;
+  document.getElementById("rbar").style.width = Math.round(100*done/r.order.length) + "%";
+  setHTML(document.getElementById("stops"), r.order.map((n,k) => { const s = SEG[n]; const e = mine(s.code); const st = statusOf(e); const tc = teamCount(s.code);
+    const pill = st==="done" ? '<span class="pill done">Done</span>' : st==="nv" ? '<span class="pill nv">Not viewable</span>' : tc ? `<span class="pill team">${tc} other${tc>1?"s":""}</span>` : s.flag ? '<span class="pill flag">Verify</span>' : "";
+    return `<li><button class="stop" data-n="${n}" aria-current="${current===n}"><span class="k">${k+1}</span><span class="c">${s.code}</span>${pill}</button></li>`; }).join(""));
+}
+document.getElementById("routes").addEventListener("click", e => { const b = e.target.closest(".rchip"); if(!b) return; route = b.dataset.r; store.settings.route = route; persist(); renderRail(); });
+document.getElementById("stops").addEventListener("click", e => { const b = e.target.closest(".stop"); if(b) openSeg(+b.dataset.n); });
+
+// ---------- form ----------
+function blank(){
+  const f = {image_month:"", image_year:"", minutes:"", view_quality:null, obs:[], no_sidewalk:false, note:"", q13:"", q13_ct:false};
+  Q.forEach(q => { if(q.multi){ f[q.key] = []; f[q.key+"_ct"] = false; } else f[q.key] = null; });
+  return f;
+}
+function fromEntry(e){
+  const f = blank();
+  if(e.image_date){ const [y,m] = String(e.image_date).split("-"); f.image_year = y; f.image_month = String(+m); }
+  f.minutes = e.minutes ?? ""; f.view_quality = e.view_quality || null;
+  f.obs = OBS.filter(([k]) => e["obs_"+k]===1).map(([k]) => k);
+  f.no_sidewalk = e.no_sidewalk === 1; f.note = e.note || "";
+  Q.forEach(q => { if(q.multi){ f[q.key] = q.opts.filter(([k]) => e[q.key+"_"+k]===1).map(([k]) => k); f[q.key+"_ct"] = e[q.key+"_cant_tell"]===1; } else f[q.key] = e[q.key] || null; });
+  if(e.q13_connections === 99) f.q13_ct = true; else f.q13 = e.q13_connections ?? "";
+  return f;
+}
+function openSeg(n){
+  current = n; const e = mine(SEG[n].code);
+  form = e ? fromEntry(e) : blank();
+  openedAt = Date.now(); clearInterval(timerId);
+  timerId = setInterval(() => { if(!form || form._minEdited) return; const el = document.getElementById("minutes"); if(el && !e) { form.minutes = String(Math.max(1, Math.round((Date.now()-openedAt)/60000))); el.value = form.minutes; } }, 15000);
+  renderRail(); renderForm();
+  if (window.matchMedia("(max-width:820px)").matches) document.getElementById("main").scrollIntoView(); else window.scrollTo(0,0);
+  document.getElementById("savebar").hidden = false; setStatus("");
+}
+const pressed = b => `aria-pressed="${b}"`;
+function renderForm(errs = {}){
+  const s = SEG[current]; const r = DATA.routes.find(x => x.id === s.route); const e = mine(s.code); const c = corners(s);
+  const tc = teamCount(s.code);
+  const years = []; for(let y = new Date().getFullYear(); y >= 2007; y--) years.push(y);
+  const nv = form.view_quality === 3;
+  const peds = (nv || form.no_sidewalk) ? "" : Q.map(q => `
+    <fieldset id="f-${q.key}" class="${errs[q.key]?"err":""}"><legend><span class="qn">${q.n}</span>${q.t}<span class="hint">${q.multi?"All that apply":"Pick one"}</span></legend>
+      <div class="opts">${q.multi
+        ? q.opts.map(([k,l]) => `<button class="opt multi" data-q="${q.key}" data-v="${k}" ${pressed(form[q.key].includes(k))}>${l}</button>`).join("") + `<button class="opt ct" data-q="${q.key}" data-v="__ct" ${pressed(form[q.key+"_ct"])}>Can't tell</button>`
+        : q.opts.map((l,i) => `<button class="opt" data-q="${q.key}" data-v="${i+1}" ${pressed(form[q.key]===i+1)}><span class="k">${i+1}</span>${l}</button>`).join("") + `<button class="opt ct" data-q="${q.key}" data-v="9" ${pressed(form[q.key]===9)}><span class="k">9</span>Can't tell</button>`}
+      </div>${errs[q.key]?`<div class="emsg">${errs[q.key]}</div>`:""}</fieldset>`).join("") + `
+    <fieldset id="f-q13" class="${errs.q13?"err":""}"><legend><span class="qn">13</span>Connections to other sidewalks / crosswalks<span class="hint">Number</span></legend>
+      <div class="row"><div class="stepper"><button data-step="-1" aria-label="One fewer">−</button><input type="number" id="q13" min="0" max="20" inputmode="numeric" value="${form.q13_ct?"":form.q13}" ${form.q13_ct?"disabled":""}><button data-step="1" aria-label="One more">+</button></div>
+      <button class="opt ct" data-q="q13" data-v="__ct" ${pressed(form.q13_ct)}><span class="k">99</span>Can't tell</button></div>${errs.q13?`<div class="emsg">${errs.q13}</div>`:""}</fieldset>`;
+  document.getElementById("main").innerHTML = `
+    <div class="seghead">
+      <div><div class="eyebrow">Route ${s.route} · stop ${s.walk} of ${r.order.length} · segment #${s.n}</div>
+        <div class="code">${s.code}</div><div class="meta">${s.street}, ${s.between}, ${SIDE[s.side].toLowerCase()} side</div></div>
+      <div class="links">${c.map((x,i) => `<a class="maplink" href="${x.url}" target="_blank" rel="noopener">${i?"End":"Start"}: ${s.street} &amp; ${x.label} ↗</a>`).join("")}</div>
+    </div>
+    <div class="notice info">Open the start corner, drag the Street View figure onto the ${SIDE[s.side].toLowerCase()} side of ${s.street}, and look along the block to ${c[1].label}. Rate what you see; don't check the field ratings first.</div>
+    ${s.flag?'<div class="notice warn">The sidewalk here may be missing (freeway frontage or tube portal). Check carefully before rating.</div>':""}
+    ${e?'<div class="notice warn">You already rated this segment. Saving replaces your earlier answers.</div>':""}
+    ${tc?`<div class="status">${tc} other rater${tc>1?"s have":" has"} rated this segment.</div>`:""}
+    <fieldset class="sv ${errs.sv?"err":""}" id="f-sv"><legend>Street View imagery</legend>
+      <div class="grid2">
+        <div class="row"><label for="imgMonth">Image date</label>
+          <select id="imgMonth"><option value="">Month</option>${MONTHS.map((m,i) => `<option value="${i+1}" ${String(i+1)===String(form.image_month)?"selected":""}>${m}</option>`).join("")}</select>
+          <select id="imgYear"><option value="">Year</option>${years.map(y => `<option ${String(y)===String(form.image_year)?"selected":""}>${y}</option>`).join("")}</select></div>
+        <div class="row"><label for="minutes">Minutes on this segment</label><input type="number" id="minutes" min="0" max="120" style="width:80px" value="${form.minutes}"></div>
+      </div>
+      <div class="opts">${VQ.map((l,i) => `<button class="opt" data-q="view_quality" data-v="${i+1}" ${pressed(form.view_quality===i+1)}><span class="k">${i+1}</span>${l}</button>`).join("")}</div>
+      ${form.view_quality===2?`<div><div class="status" style="margin-bottom:6px">What blocks the view?</div><div class="opts">${OBS.map(([k,l]) => `<button class="opt multi" data-q="obs" data-v="${k}" ${pressed(form.obs.includes(k))}>${l}</button>`).join("")}</div></div>`:""}
+      ${errs.sv?`<div class="emsg">${errs.sv}</div>`:""}
+    </fieldset>
+    ${nv?'<div class="notice info">Not viewable: the PEDS questions are skipped for this segment. Save to record it.</div>':`
+    <fieldset id="f-q0"><legend><span class="qn">0</span>No pedestrian facility</legend>
+      <div class="opts"><button class="opt multi" data-q="no_sidewalk" data-v="1" ${pressed(form.no_sidewalk)}>No sidewalk on this block face (skip the rest)</button></div></fieldset>`}
+    ${peds}
+    <fieldset><legend>Note <span class="hint">Optional</span></legend><textarea id="note" rows="2" placeholder="Construction fencing along the north half in this image">${esc(form.note)}</textarea></fieldset>`;
+}
+const esc = s => String(s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function syncInputs(){
+  const g = id => document.getElementById(id);
+  if(g("imgMonth")){ form.image_month = g("imgMonth").value; form.image_year = g("imgYear").value; }
+  if(g("minutes")) form.minutes = g("minutes").value;
+  if(g("note")) form.note = g("note").value;
+  if(g("q13") && !form.q13_ct) form.q13 = g("q13").value;
+}
+document.getElementById("main").addEventListener("input", e => { if(e.target.id==="minutes") form._minEdited = true; syncInputs(); });
+document.getElementById("main").addEventListener("change", () => syncInputs());
+document.getElementById("main").addEventListener("click", e => {
+  const st = e.target.closest("[data-step]");
+  if(st){ const el = document.getElementById("q13"); if(el.disabled) return; el.value = Math.max(0, (parseInt(el.value,10)||0) + +st.dataset.step); form.q13 = el.value; clearErr("q13"); return; }
+  const b = e.target.closest(".opt"); if(!b) return;
+  syncInputs();
+  const q = b.dataset.q, v = b.dataset.v;
+  if(q === "view_quality"){ form.view_quality = form.view_quality === +v ? null : +v; if(form.view_quality !== 2) form.obs = []; renderForm(); return; }
+  if(q === "obs"){ form.obs = form.obs.includes(v) ? form.obs.filter(x => x!==v) : form.obs.concat(v); b.setAttribute("aria-pressed", form.obs.includes(v)); return; }
+  if(q === "no_sidewalk"){ form.no_sidewalk = !form.no_sidewalk; renderForm(); return; }
+  if(q === "q13"){ form.q13_ct = !form.q13_ct; renderForm(); return; }
+  const def = Q.find(x => x.key === q);
+  if(def.multi){
+    if(v === "__ct"){ form[q+"_ct"] = !form[q+"_ct"]; if(form[q+"_ct"]) form[q] = []; }
+    else { form[q+"_ct"] = false;
+      if(form[q].includes(v)) form[q] = form[q].filter(x => x!==v);
+      else if(def.none && v === def.none) form[q] = [v];
+      else form[q] = form[q].filter(x => x !== def.none).concat(v); }
+    document.querySelectorAll(`#f-${q} .opt`).forEach(o => o.setAttribute("aria-pressed", o.dataset.v==="__ct" ? form[q+"_ct"] : form[q].includes(o.dataset.v)));
+  } else {
+    form[q] = form[q] === +v ? null : +v;
+    document.querySelectorAll(`#f-${q} .opt`).forEach(o => o.setAttribute("aria-pressed", form[q] === +o.dataset.v));
+  }
+  clearErr(q);
+});
+function clearErr(k){ const f = document.getElementById("f-"+k); if(f && f.classList.contains("err")){ f.classList.remove("err"); const m = f.querySelector(".emsg"); if(m) m.remove(); } }
+
+function validate(){
+  const errs = {};
+  const sv = [];
+  if(!form.image_month || !form.image_year) sv.push("Enter the image month and year shown in Street View.");
+  if(!form.view_quality) sv.push("Pick how clear the view is.");
+  if(form.minutes === "" || isNaN(+form.minutes) || +form.minutes < 0) sv.push("Enter the minutes spent.");
+  if(sv.length) errs.sv = sv.join(" ");
+  if(form.view_quality === 3 || form.no_sidewalk) return errs;
+  Q.forEach(q => { if(q.multi ? (!form[q.key].length && !form[q.key+"_ct"]) : !form[q.key]) errs[q.key] = q.multi ? "Pick at least one, None, or Can't tell." : "Pick one, or Can't tell."; });
+  if(!form.q13_ct && (form.q13 === "" || isNaN(+form.q13) || +form.q13 < 0 || !Number.isInteger(+form.q13))) errs.q13 = "Enter the number of connections, or Can't tell.";
+  return errs;
+}
+function toRow(){
+  const s = SEG[current]; const row = {};
+  COLS.forEach(c => row[c] = "");
+  Object.assign(row, {seg_num:s.n, seg_code:s.code, route:s.route, walk_stop:s.walk, street:s.street, between:s.between, side:SIDE[s.side],
+    gsv_link: corners(s)[0].url, rater: rater(), audit_date: new Date().toISOString().slice(0,10),
+    image_date: `${form.image_year}-${String(form.image_month).padStart(2,"0")}-01`, minutes: +form.minutes, view_quality: form.view_quality});
+  OBS.forEach(([k]) => row["obs_"+k] = form.view_quality === 2 ? (form.obs.includes(k) ? 1 : 0) : 0);
+  row.note = (form.note || "").trim();
+  if(form.view_quality === 3) return row;
+  row.no_sidewalk = form.no_sidewalk ? 1 : 0;
+  if(form.no_sidewalk) return row;
+  Q.forEach(q => {
+    if(q.multi){ q.opts.forEach(([k]) => row[q.key+"_"+k] = form[q.key+"_ct"] ? "" : (form[q.key].includes(k) ? 1 : 0)); row[q.key+"_cant_tell"] = form[q.key+"_ct"] ? 1 : 0; }
+    else row[q.key] = form[q.key];
+  });
+  row.q13_connections = form.q13_ct ? 99 : +form.q13;
+  return row;
+}
+
+// ---------- save + sync ----------
+const statusEl = document.getElementById("saveStatus");
+function setStatus(t, cls=""){ statusEl.textContent = t; statusEl.className = "status " + cls; }
+async function send(row){
+  const url = store.settings.url; if(!url) return null;
+  try {
+    const r = await fetch(url, {method:"POST", body: JSON.stringify(row)});
+    const j = await r.json(); return j && j.ok === true;
+  } catch(e) { return false; }
+}
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  syncInputs();
+  if(!rater()){ setStatus("Enter your name at the top first.", "bad"); raterEl.focus(); return; }
+  store.settings.rater = rater();
+  const errs = validate();
+  if(Object.keys(errs).length){ renderForm(errs); const f = document.querySelector("fieldset.err"); f && f.scrollIntoView({behavior:"smooth", block:"center"}); setStatus(`${Object.keys(errs).length} item${Object.keys(errs).length>1?"s":""} still need an answer.`, "bad"); return; }
+  const row = toRow(); const k = ekey(row.seg_code, row.rater);
+  store.entries[k] = Object.assign(row, {_sent: false}); persist();
+  if(!storageOk){ setStatus("This browser blocked saving. Download your CSV now from Data so nothing is lost.", "bad"); }
+  const s = SEG[current]; const r = DATA.routes.find(x => x.id === s.route);
+  const next = r.order.slice(r.order.indexOf(current)+1).find(n => !mine(SEG[n].code));
+  let msg = `Saved ${row.seg_code} on this computer.`;
+  if(store.settings.url){
+    setStatus("Saved here. Sending to the team sheet…");
+    const out = Object.assign({}, row); delete out._sent;
+    const ok = await send(out);
+    if(ok){ store.entries[k]._sent = true; persist(); msg = `Saved ${row.seg_code} and sent to the team sheet.`; }
+    else msg = `Saved ${row.seg_code} here, but the team sheet didn't answer. It will be resent from Data.`;
+  }
+  updateSync();
+  if(next) openSeg(next); else { current = null; document.getElementById("savebar").hidden = false; renderRail(); renderDone(r); }
+  setStatus(msg, msg.includes("didn't") ? "bad" : "ok");
+});
+function renderDone(r){
+  document.getElementById("main").innerHTML = `<div class="empty"><b>Route ${r.id} is done for you.</b> Pick another route on the left, or open Data to download your CSV.</div>`;
+}
+function updateSync(){
+  const unsent = Object.values(store.entries).filter(e => !e._sent && e.rater === rater()).length;
+  const dot = document.getElementById("syncDot"), t = document.getElementById("syncText");
+  if(!store.settings.url){ dot.className = "dot"; t.textContent = "Saving on this computer only"; return; }
+  dot.className = "dot " + (unsent ? "warn" : "ok");
+  t.textContent = unsent ? `${unsent} not yet sent to team sheet` : "Team sheet up to date";
+}
+
+// ---------- team progress ----------
+function normUrl(u){
+  u = String(u || "").trim().replace(/[?#].*$/, "");
+  return u.replace(/^(https:\/\/script\.google\.com\/macros)\/u\/\d+(\/s\/)/, "$1$2").replace(/^(https:\/\/script\.google\.com)\/a\/[^/]+(\/macros\/s\/)/, "$1$2");
+}
+function urlProblem(u){
+  if (/\/dev$/.test(u)) return "That's the test-deployment link (ends in /dev), which only works for you while signed in. Use Deploy > Manage deployments and copy the Web app URL that ends in /exec.";
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u)) return "That doesn't look like a web app URL. It should look like https://script.google.com/macros/s/…/exec.";
+  return "";
+}
+const listUrl = (u, extra = "") => u + "?list=1" + extra;
+// Asks the sheet for its entries and explains any failure in plain words.
+async function probe(url){
+  let r, text;
+  try { r = await fetch(listUrl(url, "&t=" + Date.now())); text = await r.text(); }
+  catch (e) {
+    const framed = (() => { try { return window.self !== window.top; } catch (x) { return true; } })();
+    return {ok:false, why: framed
+      ? "This page is running inside a preview frame that blocks outside connections. Open the tool directly in your browser (from your GitHub Pages link, or by double-clicking the downloaded file) and test again."
+      : "Your browser couldn't read an answer. That almost always means Google sent back a sign-in or error page instead of data. Open the test link to see which, then use the guide below."};
+  }
+  let j = null; try { j = JSON.parse(text); } catch (e) {}
+  if (j && j.ok) return {ok:true, j};
+  if (j && j.error) return {ok:false, why: "The sheet's script answered with an error: " + j.error};
+  if (/accounts\.google\.com|ServiceLogin|Sign in/i.test(text)) return {ok:false, why: "Google asked for a sign-in, so the web app isn't open to Anyone. In Apps Script: Deploy > Manage deployments > edit (pencil) > Who has access: Anyone > Deploy."};
+  if (/Script function not found: doGet/i.test(text)) return {ok:false, why: "The deployed version doesn't contain the connector code. Paste the code, save, then Deploy > Manage deployments > edit > Version: New version > Deploy."};
+  if (/authoriz|permission/i.test(text)) return {ok:false, why: "The script hasn't been authorized yet. In Apps Script, run doGet once from the editor (Run button) and approve the permissions, then test again."};
+  return {ok:false, why: "The URL answered with something other than data" + (r ? ` (status ${r.status})` : "") + ". Open the test link to see what it says."};
+}
+async function pullTeam(){
+  const url = store.settings.url; if(!url) return false;
+  const res = await probe(url);
+  if (!res.ok) return false;
+  store.team = {}; (res.j.rows || []).forEach(x => { (store.team[x.seg_code] = store.team[x.seg_code] || {})[x.rater] = x.status || "done"; });
+  persist(); renderRail(); return true;
+}
+function failHTML(why, url){
+  return `${esc(why)}<br><a href="${esc(listUrl(url))}" target="_blank" rel="noopener">Open the test link ↗</a> — it should show text starting with {"ok":true.`;
+}
+
+// ---------- dialogs ----------
+const setupDlg = document.getElementById("setupDlg"), dataDlg = document.getElementById("dataDlg");
+document.getElementById("gsCode").textContent = GS_CODE;
+document.getElementById("setupBtn").addEventListener("click", () => { document.getElementById("sheetUrl").value = store.settings.url || ""; setupDlg.showModal(); });
+document.getElementById("closeSetup").addEventListener("click", () => {
+  const u = normUrl(document.getElementById("sheetUrl").value);
+  store.settings.url = u; persist(); updateSync(); setupDlg.close(); if(u) pullTeam();
+});
+document.getElementById("testUrl").addEventListener("click", async () => {
+  const inp = document.getElementById("sheetUrl"), st = document.getElementById("urlStatus");
+  const u = normUrl(inp.value); inp.value = u;
+  const bad = urlProblem(u); if (bad) { st.textContent = bad; st.className = "status bad"; return; }
+  st.textContent = "Checking…"; st.className = "status";
+  store.settings.url = u; persist(); updateSync();
+  const res = await probe(u);
+  if (res.ok) {
+    store.team = {}; (res.j.rows || []).forEach(x => { (store.team[x.seg_code] = store.team[x.seg_code] || {})[x.rater] = x.status || "done"; });
+    persist(); renderRail();
+    st.textContent = `Connected. The team sheet has ${res.j.count} entr${res.j.count===1?"y":"ies"}.` + (res.j.version >= 3 ? "" : " The sheet is running older connector code; paste the latest code and deploy a new version.");
+    st.className = "status ok";
+  } else { st.innerHTML = failHTML(res.why, u); st.className = "status bad"; }
+});
+document.getElementById("copyCode").addEventListener("click", () => {
+  const st = document.getElementById("codeStatus");
+  try { navigator.clipboard.writeText(GS_CODE).then(() => st.textContent = "Copied", () => st.textContent = "Select the code below and copy it."); } catch(e) { st.textContent = "Select the code below and copy it."; }
+});
+function csvText(rows){
+  const q = v => { if (typeof v !== "number") { v = String(v ?? ""); if (/^[=+\-@]/.test(v)) v = "'" + v; } else v = String(v);
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  return [COLS.join(",")].concat(rows.map(r => COLS.map(c => q(r[c])).join(","))).join("\n");
+}
+function renderData(){
+  const all = Object.values(store.entries);
+  const byR = {}; all.forEach(e => byR[e.rater] = (byR[e.rater]||0) + 1);
+  document.getElementById("dataSummary").innerHTML = all.length
+    ? `<table class="mini"><tr><th>Rater</th><th>Segments saved here</th><th>Not sent</th></tr>${Object.entries(byR).map(([r,n]) => `<tr><td>${esc(r)}</td><td>${n}</td><td>${all.filter(e => e.rater===r && !e._sent).length}</td></tr>`).join("")}</table>`
+    : '<p class="status">Nothing saved on this computer yet.</p>';
+}
+document.getElementById("dataBtn").addEventListener("click", () => { renderData(); document.getElementById("dataStatus").textContent = ""; dataDlg.showModal(); });
+document.getElementById("closeData").addEventListener("click", () => dataDlg.close());
+document.getElementById("dlCsv").addEventListener("click", () => {
+  const rows = Object.values(store.entries).filter(e => isTest(e.rater) === !!store.settings.test)
+    .sort((a,b) => a.seg_num - b.seg_num || String(a.rater).localeCompare(b.rater));
+  const blob = new Blob([csvText(rows)], {type:"text/csv"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `chinatown_gsv_${(rater()||"all").replace(/[^A-Za-z0-9]+/g,"_")}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  document.getElementById("dataStatus").textContent = `Downloaded ${rows.length} rows.`;
+});
+document.getElementById("resend").addEventListener("click", async () => {
+  const st = document.getElementById("dataStatus");
+  if(!store.settings.url){ st.textContent = "Add the team sheet URL first (Team sheet button)."; return; }
+  const todo = Object.entries(store.entries).filter(([k,e]) => !e._sent);
+  let ok = 0; st.textContent = `Sending ${todo.length}…`;
+  for(const [k,e] of todo){ const row = Object.assign({}, e); delete row._sent; if(await send(row)){ store.entries[k]._sent = true; ok++; } }
+  persist(); updateSync(); renderData(); pullTeam();
+  st.textContent = `Sent ${ok} of ${todo.length}.` + (ok < todo.length ? " Try again when you're online." : "");
+});
+function parseCSV(text){
+  const rows = []; let row = [], f = "", q = false;
+  for(let i = 0; i < text.length; i++){ const c = text[i];
+    if(q){ if(c === '"'){ if(text[i+1] === '"'){ f += '"'; i++; } else q = false; } else f += c; }
+    else if(c === '"') q = true; else if(c === ","){ row.push(f); f = ""; }
+    else if(c === "\n" || c === "\r"){ if(c === "\r" && text[i+1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c; }
+  if(f !== "" || row.length){ row.push(f); rows.push(row); }
+  return rows;
+}
+document.getElementById("importCsv").addEventListener("change", async e => {
+  const file = e.target.files[0]; if(!file) return; const st = document.getElementById("dataStatus");
+  const rows = parseCSV(await file.text()); const head = rows.shift() || [];
+  if(head.join(",") !== COLS.join(",")){ st.textContent = "That file's columns don't match this tool's CSV. Import a CSV downloaded from this tool."; e.target.value = ""; return; }
+  let n = 0;
+  rows.forEach(r => { if(r.length !== COLS.length || !BYCODE[r[1]]) return; const o = {};
+    COLS.forEach((c,i) => { let v = r[i]; if (/^'[=+\-@]/.test(v)) v = v.slice(1); o[c] = (v !== "" && /^-?\d+(\.\d+)?$/.test(v) && !["seg_code","rater","note","street","between","side","route","gsv_link","audit_date","image_date"].includes(c)) ? +v : v; });
+    const k = ekey(o.seg_code, o.rater); if(!store.entries[k]){ store.entries[k] = Object.assign(o, {_sent: false}); n++; } });
+  persist(); renderData(); renderRail(); updateSync(); e.target.value = "";
+  st.textContent = `Imported ${n} new rows. Rows already here were kept as they were.`;
+});
+
+// ---------- test mode ----------
+const testBtn = document.getElementById("testBtn"), testbar = document.getElementById("testbar");
+function applyTestMode(){
+  const on = !!store.settings.test;
+  testBtn.setAttribute("aria-pressed", on); testbar.hidden = !on;
+  renderRail(); updateSync();
+  if (current) openSeg(current);
+}
+testBtn.addEventListener("click", () => { store.settings.test = !store.settings.test; persist(); document.getElementById("testStatus").textContent = ""; applyTestMode(); });
+document.getElementById("exitTest").addEventListener("click", () => { store.settings.test = false; persist(); applyTestMode(); });
+async function postAction(body){
+  const url = store.settings.url; if(!url) return null;
+  try { const r = await fetch(url, {method:"POST", body: JSON.stringify(body)}); return await r.json(); } catch(e) { return {ok:false, error:String(e)}; }
+}
+document.getElementById("clearTest").addEventListener("click", async () => {
+  const st = document.getElementById("testStatus");
+  const keys = Object.keys(store.entries).filter(k => isTest(store.entries[k].rater));
+  keys.forEach(k => delete store.entries[k]); persist();
+  let msg = `Removed ${keys.length} test entr${keys.length===1?"y":"ies"} from this computer.`;
+  if (store.settings.url) {
+    const j = await postAction({_action:"delete_test"});
+    msg += j && j.ok ? ` Removed ${j.deleted} test row${j.deleted===1?"":"s"} from the team sheet.` : " The team sheet didn't remove its test rows; delete rows whose rater ends in (TEST) by hand.";
+    await pullTeam();
+  }
+  st.textContent = msg; renderRail(); updateSync(); if (current) openSeg(current);
+});
+
+// ---------- setup check ----------
+const checkDlg = document.getElementById("checkDlg"), checksEl = document.getElementById("checks");
+const CHECKS = [
+  ["storage", "This browser can save entries", "Saves and reads back a test value, then deletes it."],
+  ["reload", "Saved entries survive reopening", "Looks for the marker left by the last check run. Run the checks, close the tab, reopen the link, and run them again."],
+  ["sheetConnect", "Team sheet answers", "Asks the web app for its entry count."],
+  ["sheetWrite", "A save reaches the team sheet", "Sends a throwaway row (segment SETUP-CHECK)."],
+  ["sheetRead", "The sheet shows that row", "Reads the sheet back and looks for the throwaway row."],
+  ["sheetClean", "Test rows can be removed", "Deletes the throwaway row again."],
+  ["maps", "Street View links open", "Click a Start corner link on any stop; Google Maps should open in a new tab. This one is up to you."],
+];
+function drawChecks(res = {}){
+  checksEl.innerHTML = CHECKS.map(([k, t, why]) => { const r = res[k] || {s:"", m:""};
+    const sym = {pass:"✓", fail:"✕", skip:"–", run:"…"}[r.s] || "";
+    return `<li><span class="mark ${r.s}">${sym}</span><div><b>${t}</b><div class="why">${r.html || esc(r.m || why)}</div></div></li>`; }).join("");
+}
+const MARK_KEY = "peds-gsv-setup-marker";
+async function runChecks(){
+  const res = {}; const set = (k, s, m, html) => { res[k] = {s, m, html}; drawChecks(res); };
+  const btn = document.getElementById("runChecks"); btn.disabled = true;
+  // 1 storage
+  try { localStorage.setItem("peds-gsv-probe", "1"); const ok = localStorage.getItem("peds-gsv-probe") === "1"; localStorage.removeItem("peds-gsv-probe");
+    set("storage", ok ? "pass" : "fail", ok ? "Saving works in this browser." : "This browser didn't keep the test value. Use a normal window in Chrome, Edge, Firefox or Safari."); }
+  catch(e) { set("storage", "fail", "This browser blocks saving (private window or strict privacy settings). Raters here must download their CSV after every few segments."); }
+  // 2 reload marker
+  let prev = null; try { prev = localStorage.getItem(MARK_KEY); localStorage.setItem(MARK_KEY, new Date().toISOString()); } catch(e) {}
+  set("reload", prev ? "pass" : "skip", prev ? `Found the marker from ${new Date(prev).toLocaleString()}, so saved work survives reopening.` : "Marker saved. Close this tab, reopen the same link, and run the checks again to confirm.");
+  // 3–6 sheet
+  const url = store.settings.url;
+  if (!url) { ["sheetConnect","sheetWrite","sheetRead","sheetClean"].forEach(k => set(k, "skip", "No team sheet URL set. Skip this if raters will send CSVs instead; otherwise add it under Team sheet.")); }
+  else {
+    const pr = await probe(url); const j = pr.ok ? pr.j : null;
+    if (!j) { set("sheetConnect", "fail", pr.why, failHTML(pr.why, url)); ["sheetWrite","sheetRead","sheetClean"].forEach(k => set(k, "skip", "Skipped because the sheet didn't answer.")); }
+    else {
+      set("sheetConnect", "pass", `Connected. The sheet has ${j.count} entr${j.count===1?"y":"ies"}.` + (j.version >= 3 ? "" : " It's running an older version of the connector code; paste the new code and redeploy so test rows can be cleaned up."));
+      const row = {}; COLS.forEach(c => row[c] = ""); Object.assign(row, {seg_code:"SETUP-CHECK", rater:"__setup_test__", audit_date:new Date().toISOString().slice(0,10), view_quality:3, note:"Setup check row, safe to delete"});
+      const w = await postAction(row);
+      if (!w || !w.ok) { set("sheetWrite", "fail", "The sheet refused the row" + (w && w.error ? ": " + w.error : ".") + " Redeploy the web app with Execute as: Me."); ["sheetRead","sheetClean"].forEach(k => set(k, "skip", "Skipped because the write failed.")); }
+      else {
+        set("sheetWrite", "pass", "The sheet accepted the row.");
+        let found = false;
+        try { const r = await fetch(url + (url.includes("?") ? "&" : "?") + "list=1&t=" + Date.now()); const k = await r.json(); found = (k.rows || []).some(x => x.seg_code === "SETUP-CHECK"); } catch(e) {}
+        set("sheetRead", found ? "pass" : "fail", found ? "Found it in the “GSV entries” tab." : "The row didn't come back. Open the sheet and look for a GSV entries tab.");
+        const d = await postAction({_action:"delete_test"});
+        set("sheetClean", d && d.ok ? "pass" : "fail", d && d.ok ? "Removed it again." : "Couldn't remove it. Delete the SETUP-CHECK row by hand, and redeploy with the latest connector code.");
+        await pullTeam();
+      }
+    }
+  }
+  set("maps", "skip", "Click a Start corner link on any stop; Google Maps should open in a new tab.");
+  const fails = Object.values(res).filter(r => r.s === "fail").length;
+  document.getElementById("checkStatus").textContent = fails ? `${fails} check${fails>1?"s":""} failed.` : "All automatic checks passed.";
+  document.getElementById("checkStatus").className = "status " + (fails ? "bad" : "ok");
+  btn.disabled = false;
+}
+document.getElementById("checkBtn").addEventListener("click", () => { drawChecks(); document.getElementById("checkStatus").textContent = ""; checkDlg.showModal(); });
+document.getElementById("closeCheck").addEventListener("click", () => checkDlg.close());
+document.getElementById("runChecks").addEventListener("click", runChecks);
+document.getElementById("dlTest").addEventListener("click", () => {
+  const row = {}; COLS.forEach(c => row[c] = ""); Object.assign(row, {seg_code:"SETUP-CHECK", rater:"__setup_test__", note:"Download test"});
+  const blob = new Blob([csvText([row])], {type:"text/csv"}); const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "chinatown_gsv_download_test.csv"; document.body.appendChild(a); a.click(); a.remove();
+  document.getElementById("checkStatus").textContent = "If a file named chinatown_gsv_download_test.csv appeared in Downloads, downloads work.";
+  document.getElementById("checkStatus").className = "status";
+});
+
+// ---------- start ----------
+applyTestMode();
+document.getElementById("main").innerHTML = `<div class="empty"><b>Pick a stop on the left to start.</b><br>Each stop is one side of one block. Enter your name at the top first. Your work saves in this browser as you go, so use the same computer and browser each time, and download your CSV from Data at the end of each session.</div>`;
+if(store.settings.url) pullTeam();
+</script>
+</body>
+</html>

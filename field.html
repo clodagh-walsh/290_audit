@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f7c6e">
+<title>Chinatown Field Audit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-thumb field app — compact header (rater, visit, sync), then either the route stop list or the segment form; save bar pinned to the bottom */
+:root{
+  --bg:#f3f4f2; --panel:#ffffff; --fg:#1d2321; --muted:#5d6763; --line:#d5d9d6;
+  --accent:#0f7c6e; --accent-ink:#ffffff; --accent-soft:#e1f1ed; --ok:#2f7d32; --ok-soft:#dff0e1; --warn:#9a5a00; --warn-soft:#fbf0dc; --bad:#b3261e; --bad-soft:#fbe3e1;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#141817; --panel:#1c2120; --fg:#e6ebe8; --muted:#9aa5a0; --line:#323a37;
+  --accent:#3fbfa9; --accent-ink:#0d1614; --accent-soft:#183a34; --ok:#7cc77f; --ok-soft:#1d3320; --warn:#f0b35a; --warn-soft:#3a2d16; --bad:#ff7a6e; --bad-soft:#3d1d1a; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.45;padding-bottom:env(safe-area-inset-bottom,0px)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:640px;margin:0 auto;padding-inline:14px}
+header.top{background:var(--bg);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+header .wrap{display:grid;gap:8px;padding-block:10px}
+.brand{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h1{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:0}
+.idrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+input[type=text],input[type=number],input[type=url],select,textarea{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:var(--panel);width:100%}
+.tools{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:8px 13px;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn.small{padding:5px 11px;font-size:.88rem}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+#testBtn[aria-pressed=true]{background:var(--warn-soft);border-color:var(--warn)}
+.sync{font-size:.82rem;color:var(--muted);display:flex;gap:7px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
+.testbar{background:var(--warn-soft);border-bottom:1px solid var(--warn);font-size:.9rem}
+.testbar .wrap{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding-block:8px}
+main{padding-block:14px 120px;display:grid;gap:12px}
+main > section, header .wrap > *{min-width:0}
+.routes{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.rchip{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:4px 10px;cursor:pointer;display:grid;line-height:1.1;min-width:52px;text-align:left}
+.rchip b{font-family:var(--display);font-size:1.15rem}
+.rchip small{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.rchip[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.rhead{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rhead h2{font-family:var(--display);font-size:1.35rem;margin:0}
+.eyebrow{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:.8rem;color:var(--muted);font-weight:600}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.stops{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.stops li+li{border-top:1px solid var(--line)}
+.stop{width:100%;border:0;background:none;text-align:left;padding:11px 12px;cursor:pointer;display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:56px}
+.stop .k{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.stop .c{font-family:var(--mono);font-size:.92rem}
+.stop .sub{font-size:.8rem;color:var(--muted)}
+.pills{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.pill{font-size:.72rem;font-weight:600;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.pill.done{background:var(--accent);color:var(--accent-ink)}
+.pill.team{background:var(--accent-soft);color:var(--fg)}
+.pill.flag{background:var(--warn-soft);color:var(--warn)}
+.seghead{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:4px}
+.code{font-family:var(--mono);font-size:1.25rem}
+.meta{color:var(--muted);font-size:.92rem}
+a.maplink{color:var(--accent);font-weight:600;font-size:.9rem}
+.notice{border-radius:9px;padding:8px 11px;font-size:.9rem}
+.notice.warn{background:var(--warn-soft)}
+fieldset{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0;background:var(--panel);display:grid;gap:8px;min-width:0}
+fieldset.err{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
+legend{padding:0 4px;font-weight:600}
+.qn{font-family:var(--display);font-weight:700;color:var(--accent);margin-right:6px}
+.hint{font-size:.78rem;color:var(--muted);font-weight:400;margin-left:6px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 12px;cursor:pointer;display:inline-flex;gap:8px;align-items:center;min-height:44px}
+.opt .k{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+.opt.multi::before{content:"";width:14px;height:14px;border:1.5px solid currentColor;border-radius:3px;flex:0 0 auto}
+.opt[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.opt[aria-pressed=true] .k{color:var(--accent-ink)}
+.opt.multi[aria-pressed=true]::before{background:currentColor;box-shadow:inset 0 0 0 2px var(--accent)}
+.emsg{color:var(--bad);font-size:.85rem}
+.stepper{display:flex;gap:8px;align-items:center}
+.stepper button{width:46px;height:46px;border-radius:9px;border:1px solid var(--line);background:var(--bg);cursor:pointer;font-size:1.3rem}
+.stepper input{width:80px;text-align:center;font-size:1.1rem}
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.savebar .wrap{display:grid;gap:4px;padding-block:10px}
+.savebar .in{display:flex;gap:10px}
+.savebar .primary{flex:1;min-height:50px}
+.status{font-size:.88rem;color:var(--muted);min-height:1.2em}
+.status.bad{color:var(--bad)}.status.ok{color:var(--ok)}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--fg);max-width:620px;width:calc(100% - 24px);padding:18px;max-height:calc(100vh - 40px);overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog h2{font-family:var(--display);margin:0 0 6px;font-size:1.45rem}
+dialog ol{padding-left:20px;display:grid;gap:6px}
+pre.code{font-family:var(--mono);font-size:.7rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:200px;overflow:auto;white-space:pre}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row > input{width:auto}
+ul.checks{list-style:none;padding:0;margin:10px 0;display:grid;gap:8px}
+ul.checks li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:start}
+.mark{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-weight:700;font-size:.8rem;background:var(--line);color:var(--muted)}
+.mark.pass{background:var(--ok-soft);color:var(--ok)}.mark.fail{background:var(--bad-soft);color:var(--bad)}
+.checks .why{font-size:.85rem;color:var(--muted)}
+table.mini{border-collapse:collapse;font-size:.85rem;width:100%}
+table.mini td,table.mini th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:top}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:20px;color:var(--muted);background:var(--panel)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>Chinatown field audit</h1><div class="sync"><span class="dot" id="syncDot"></span><span id="syncText">Saving on this phone only</span></div></div>
+    <div class="idrow">
+      <input type="text" id="rater" placeholder="Your name" autocomplete="name" aria-label="Rater name">
+      <select id="visit" aria-label="Visit"><option value="1">Visit 1</option><option value="2">Visit 2</option><option value="3">Visit 3</option></select>
+    </div>
+    <div class="tools">
+      <button class="btn small" id="checkBtn">Check setup</button>
+      <button class="btn small" id="testBtn" aria-pressed="false">Test mode</button>
+      <button class="btn small" id="setupBtn">Team sheet</button>
+      <button class="btn small" id="dataBtn">Data</button>
+    </div>
+  </div>
+</header>
+<div class="testbar" id="testbar" hidden><div class="wrap">
+  <b>Test mode.</b> Saves are labeled “(TEST)” and kept apart from real ratings.
+  <button class="btn small" id="clearTest">Clear test data</button><button class="btn small" id="exitTest">Leave test mode</button>
+  <span id="testStatus"></span>
+</div></div>
+
+<main class="wrap">
+  <section id="viewList"></section>
+  <section id="viewForm" hidden></section>
+</main>
+
+<div class="savebar" id="savebar" hidden><div class="wrap">
+  <div class="in"><button class="btn" id="backBtn">List</button><button class="btn primary" id="saveBtn">Save and next</button></div>
+  <span class="status" id="saveStatus" role="status"></span>
+</div></div>
+
+
+<dialog id="setupDlg">
+  <h2>Team sheet</h2>
+  <p>Paste the web app link from the audit lead. Every save then also goes to the shared Google Sheet. Without it, everything stays on this phone until you download it from Data.</p>
+  <div class="row"><input type="url" id="sheetUrl" style="flex:1 1 200px;min-width:0;width:auto" placeholder="https://script.google.com/macros/s/…/exec"><button class="btn" id="testUrl">Test</button></div>
+  <p class="status" id="urlStatus"></p>
+  <details>
+    <summary style="cursor:pointer;font-weight:600">Setup for the audit lead (same sheet as the Street View tool)</summary>
+    <ol>
+      <li>Open your team Google Sheet › Extensions › Apps Script. Replace the code with the code below and save. It serves both the Street View and the field tool.</li>
+      <li>Pick <b>testSetup</b> next to Run and click Run. Approve the permissions.</li>
+      <li>Deploy › Manage deployments › pencil › Version: <b>New version</b> › Deploy. (First time: Deploy › New deployment › Web app, Execute as Me, Who has access Anyone.)</li>
+      <li>The /exec link stays the same; send it to the field team.</li>
+    </ol>
+    <div class="row"><button class="btn small" id="copyCode">Copy code</button><span class="status" id="codeStatus"></span></div>
+    <pre class="code" id="gsCode"></pre>
+  </details>
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn" id="closeSetup">Done</button></div>
+</dialog>
+
+<dialog id="checkDlg">
+  <h2>Check setup</h2>
+  <p>Runs the steps a real save does with a throwaway row, then removes it. Run it on a phone, from the link the team will use.</p>
+  <ul class="checks" id="checks"></ul>
+  <div class="row"><button class="btn primary" id="runChecks">Run checks</button><span class="status" id="checkStatus"></span></div>
+  <p class="status">Then turn on Test mode, rate a segment or two, check the sheet's Field entries tab, and clear the test data.</p>
+  <div class="row" style="justify-content:flex-end"><button class="btn" id="closeCheck">Done</button></div>
+</dialog>
+
+<dialog id="dataDlg">
+  <h2>Data on this phone</h2>
+  <div id="dataSummary"></div>
+  <div class="row" style="margin:10px 0">
+    <button class="btn" id="resend">Send unsent now</button>
+    <button class="btn" id="dlCsv">Download CSV</button>
+  </div>
+  <p class="status" id="dataStatus"></p>
+  <p class="status">The CSV is for the visit picked at the top. Its columns match the Data sheet of Chinatown_PEDS_SectionB_data.xlsx (A to AL).</p>
+  <div class="row" style="justify-content:flex-end"><button class="btn" id="closeData">Done</button></div>
+</dialog>
+
+<script>
+const DATA = {"segments":[{"n":1,"code":"BWY 06–07 E","street":"Broadway","between":"6th – 7th","side":"E","flag":false,"route":"A","walk":1},{"n":2,"code":"BWY 07–08 E","street":"Broadway","between":"7th – 8th","side":"E","flag":false,"route":"A","walk":2},{"n":3,"code":"BWY 08–09 E","street":"Broadway","between":"8th – 9th","side":"E","flag":false,"route":"A","walk":3},{"n":4,"code":"BWY 09–10 E","street":"Broadway","between":"9th – 10th","side":"E","flag":false,"route":"A","walk":4},{"n":5,"code":"BWY 10–11 E","street":"Broadway","between":"10th – 11th","side":"E","flag":false,"route":"A","walk":5},{"n":6,"code":"BWY 11–12 E","street":"Broadway","between":"11th – 12th","side":"E","flag":false,"route":"A","walk":6},{"n":7,"code":"FRK 06–07 W","street":"Franklin St","between":"6th – 7th","side":"W","flag":false,"route":"A","walk":7},{"n":8,"code":"FRK 06–07 E","street":"Franklin St","between":"6th – 7th","side":"E","flag":false,"route":"A","walk":18},{"n":9,"code":"FRK 07–08 W","street":"Franklin St","between":"7th – 8th","side":"W","flag":false,"route":"A","walk":8},{"n":10,"code":"FRK 07–08 E","street":"Franklin St","between":"7th – 8th","side":"E","flag":false,"route":"A","walk":17},{"n":11,"code":"FRK 08–09 W","street":"Franklin St","between":"8th – 9th","side":"W","flag":false,"route":"A","walk":9},{"n":12,"code":"FRK 08–09 E","street":"Franklin St","between":"8th – 9th","side":"E","flag":false,"route":"A","walk":16},{"n":13,"code":"FRK 09–10 W","street":"Franklin St","between":"9th – 10th","side":"W","flag":false,"route":"A","walk":10},{"n":14,"code":"FRK 09–10 E","street":"Franklin St","between":"9th – 10th","side":"E","flag":false,"route":"A","walk":15},{"n":15,"code":"FRK 10–11 W","street":"Franklin St","between":"10th – 11th","side":"W","flag":false,"route":"A","walk":11},{"n":16,"code":"FRK 10–11 E","street":"Franklin St","between":"10th – 11th","side":"E","flag":false,"route":"A","walk":14},{"n":17,"code":"FRK 11–12 W","street":"Franklin St","between":"11th – 12th","side":"W","flag":false,"route":"A","walk":12},{"n":18,"code":"FRK 11–12 E","street":"Franklin St","between":"11th – 12th","side":"E","flag":false,"route":"A","walk":13},{"n":19,"code":"WEB 06–07 W","street":"Webster St","between":"6th – 7th","side":"W","flag":true,"route":"B","walk":1},{"n":20,"code":"WEB 06–07 E","street":"Webster St","between":"6th – 7th","side":"E","flag":true,"route":"B","walk":12},{"n":21,"code":"WEB 07–08 W","street":"Webster St","between":"7th – 8th","side":"W","flag":false,"route":"B","walk":2},{"n":22,"code":"WEB 07–08 E","street":"Webster St","between":"7th – 8th","side":"E","flag":false,"route":"B","walk":11},{"n":23,"code":"WEB 08–09 W","street":"Webster St","between":"8th – 9th","side":"W","flag":false,"route":"B","walk":3},{"n":24,"code":"WEB 08–09 E","street":"Webster St","between":"8th – 9th","side":"E","flag":false,"route":"B","walk":10},{"n":25,"code":"WEB 09–10 W","street":"Webster St","between":"9th – 10th","side":"W","flag":false,"route":"B","walk":4},{"n":26,"code":"WEB 09–10 E","street":"Webster St","between":"9th – 10th","side":"E","flag":false,"route":"B","walk":9},{"n":27,"code":"WEB 10–11 W","street":"Webster St","between":"10th – 11th","side":"W","flag":false,"route":"B","walk":5},{"n":28,"code":"WEB 10–11 E","street":"Webster St","between":"10th – 11th","side":"E","flag":false,"route":"B","walk":8},{"n":29,"code":"WEB 11–12 W","street":"Webster St","between":"11th – 12th","side":"W","flag":false,"route":"B","walk":6},{"n":30,"code":"WEB 11–12 E","street":"Webster St","between":"11th – 12th","side":"E","flag":false,"route":"B","walk":7},{"n":31,"code":"HAR 06–07 W","street":"Harrison St","between":"6th – 7th","side":"W","flag":true,"route":"B","walk":13},{"n":32,"code":"HAR 06–07 E","street":"Harrison St","between":"6th – 7th","side":"E","flag":true,"route":"B","walk":24},{"n":33,"code":"HAR 07–08 W","street":"Harrison St","between":"7th – 8th","side":"W","flag":false,"route":"B","walk":14},{"n":34,"code":"HAR 07–08 E","street":"Harrison St","between":"7th – 8th","side":"E","flag":false,"route":"B","walk":23},{"n":35,"code":"HAR 08–09 W","street":"Harrison St","between":"8th – 9th","side":"W","flag":false,"route":"B","walk":15},{"n":36,"code":"HAR 08–09 E","street":"Harrison St","between":"8th – 9th","side":"E","flag":false,"route":"B","walk":22},{"n":37,"code":"HAR 09–10 W","street":"Harrison St","between":"9th – 10th","side":"W","flag":false,"route":"B","walk":16},{"n":38,"code":"HAR 09–10 E","street":"Harrison St","between":"9th – 10th","side":"E","flag":false,"route":"B","walk":21},{"n":39,"code":"HAR 10–11 W","street":"Harrison St","between":"10th – 11th","side":"W","flag":false,"route":"B","walk":17},{"n":40,"code":"HAR 10–11 E","street":"Harrison St","between":"10th – 11th","side":"E","flag":false,"route":"B","walk":20},{"n":41,"code":"HAR 11–12 W","street":"Harrison St","between":"11th – 12th","side":"W","flag":false,"route":"B","walk":18},{"n":42,"code":"HAR 11–12 E","street":"Harrison St","between":"11th – 12th","side":"E","flag":false,"route":"B","walk":19},{"n":43,"code":"ALI 06–07 W","street":"Alice St","between":"6th – 7th","side":"W","flag":false,"route":"C","walk":1},{"n":44,"code":"ALI 06–07 E","street":"Alice St","between":"6th – 7th","side":"E","flag":false,"route":"C","walk":12},{"n":45,"code":"ALI 07–08 W","street":"Alice St","between":"7th – 8th","side":"W","flag":false,"route":"C","walk":2},{"n":46,"code":"ALI 07–08 E","street":"Alice St","between":"7th – 8th","side":"E","flag":false,"route":"C","walk":11},{"n":47,"code":"ALI 08–09 W","street":"Alice St","between":"8th – 9th","side":"W","flag":false,"route":"C","walk":3},{"n":48,"code":"ALI 08–09 E","street":"Alice St","between":"8th – 9th","side":"E","flag":false,"route":"C","walk":10},{"n":49,"code":"ALI 09–10 W","street":"Alice St","between":"9th – 10th","side":"W","flag":false,"route":"C","walk":4},{"n":50,"code":"ALI 09–10 E","street":"Alice St","between":"9th – 10th","side":"E","flag":false,"route":"C","walk":9},{"n":51,"code":"ALI 10–11 W","street":"Alice St","between":"10th – 11th","side":"W","flag":false,"route":"C","walk":5},{"n":52,"code":"ALI 10–11 E","street":"Alice St","between":"10th – 11th","side":"E","flag":false,"route":"C","walk":8},{"n":53,"code":"ALI 11–12 W","street":"Alice St","between":"11th – 12th","side":"W","flag":false,"route":"C","walk":6},{"n":54,"code":"ALI 11–12 E","street":"Alice St","between":"11th – 12th","side":"E","flag":false,"route":"C","walk":7},{"n":55,"code":"JAC 06–07 W","street":"Jackson St","between":"6th – 7th","side":"W","flag":true,"route":"C","walk":13},{"n":56,"code":"JAC 06–07 E","street":"Jackson St","between":"6th – 7th","side":"E","flag":true,"route":"C","walk":24},{"n":57,"code":"JAC 07–08 W","street":"Jackson St","between":"7th – 8th","side":"W","flag":false,"route":"C","walk":14},{"n":58,"code":"JAC 07–08 E","street":"Jackson St","between":"7th – 8th","side":"E","flag":false,"route":"C","walk":23},{"n":59,"code":"JAC 08–09 W","street":"Jackson St","between":"8th – 9th","side":"W","flag":false,"route":"C","walk":15},{"n":60,"code":"JAC 08–09 E","street":"Jackson St","between":"8th – 9th","side":"E","flag":false,"route":"C","walk":22},{"n":61,"code":"JAC 09–10 W","street":"Jackson St","between":"9th – 10th","side":"W","flag":false,"route":"C","walk":16},{"n":62,"code":"JAC 09–10 E","street":"Jackson St","between":"9th – 10th","side":"E","flag":false,"route":"C","walk":21},{"n":63,"code":"JAC 10–11 W","street":"Jackson St","between":"10th – 11th","side":"W","flag":false,"route":"C","walk":17},{"n":64,"code":"JAC 10–11 E","street":"Jackson St","between":"10th – 11th","side":"E","flag":false,"route":"C","walk":20},{"n":65,"code":"JAC 11–12 W","street":"Jackson St","between":"11th – 12th","side":"W","flag":false,"route":"C","walk":18},{"n":66,"code":"JAC 11–12 E","street":"Jackson St","between":"11th – 12th","side":"E","flag":false,"route":"C","walk":19},{"n":67,"code":"MAD 06–07 W","street":"Madison St","between":"6th – 7th","side":"W","flag":false,"route":"D","walk":1},{"n":68,"code":"MAD 06–07 E","street":"Madison St","between":"6th – 7th","side":"E","flag":false,"route":"D","walk":12},{"n":69,"code":"MAD 07–08 W","street":"Madison St","between":"7th – 8th","side":"W","flag":false,"route":"D","walk":2},{"n":70,"code":"MAD 07–08 E","street":"Madison St","between":"7th – 8th","side":"E","flag":false,"route":"D","walk":11},{"n":71,"code":"MAD 08–09 W","street":"Madison St","between":"8th – 9th","side":"W","flag":false,"route":"D","walk":3},{"n":72,"code":"MAD 08–09 E","street":"Madison St","between":"8th – 9th","side":"E","flag":false,"route":"D","walk":10},{"n":73,"code":"MAD 09–10 W","street":"Madison St","between":"9th – 10th","side":"W","flag":false,"route":"D","walk":4},{"n":74,"code":"MAD 09–10 E","street":"Madison St","between":"9th – 10th","side":"E","flag":false,"route":"D","walk":9},{"n":75,"code":"MAD 10–11 W","street":"Madison St","between":"10th – 11th","side":"W","flag":false,"route":"D","walk":5},{"n":76,"code":"MAD 10–11 E","street":"Madison St","between":"10th – 11th","side":"E","flag":false,"route":"D","walk":8},{"n":77,"code":"MAD 11–12 W","street":"Madison St","between":"11th – 12th","side":"W","flag":false,"route":"D","walk":6},{"n":78,"code":"MAD 11–12 E","street":"Madison St","between":"11th – 12th","side":"E","flag":false,"route":"D","walk":7},{"n":79,"code":"OAK 06–07 W","street":"Oak St","between":"6th – 7th","side":"W","flag":false,"route":"D","walk":13},{"n":80,"code":"OAK 06–07 E","street":"Oak St","between":"6th – 7th","side":"E","flag":false,"route":"D","walk":24},{"n":81,"code":"OAK 07–08 W","street":"Oak St","between":"7th – 8th","side":"W","flag":false,"route":"D","walk":14},{"n":82,"code":"OAK 07–08 E","street":"Oak St","between":"7th – 8th","side":"E","flag":false,"route":"D","walk":23},{"n":83,"code":"OAK 08–09 W","street":"Oak St","between":"8th – 9th","side":"W","flag":false,"route":"D","walk":15},{"n":84,"code":"OAK 08–09 E","street":"Oak St","between":"8th – 9th","side":"E","flag":false,"route":"D","walk":22},{"n":85,"code":"OAK 09–10 W","street":"Oak St","between":"9th – 10th","side":"W","flag":false,"route":"D","walk":16},{"n":86,"code":"OAK 09–10 E","street":"Oak St","between":"9th – 10th","side":"E","flag":false,"route":"D","walk":21},{"n":87,"code":"OAK 10–11 W","street":"Oak St","between":"10th – 11th","side":"W","flag":false,"route":"D","walk":17},{"n":88,"code":"OAK 10–11 E","street":"Oak St","between":"10th – 11th","side":"E","flag":false,"route":"D","walk":20},{"n":89,"code":"OAK 11–12 W","street":"Oak St","between":"11th – 12th","side":"W","flag":false,"route":"D","walk":18},{"n":90,"code":"OAK 11–12 E","street":"Oak St","between":"11th – 12th","side":"E","flag":false,"route":"D","walk":19},{"n":91,"code":"FAL 06–07 W","street":"Fallon St","between":"6th – 7th","side":"W","flag":true,"route":"E","walk":9},{"n":92,"code":"FAL 07–08 W","street":"Fallon St","between":"7th – 8th","side":"W","flag":true,"route":"E","walk":10},{"n":93,"code":"FAL 08–09 W","street":"Fallon St","between":"8th – 9th","side":"W","flag":true,"route":"E","walk":11},{"n":94,"code":"FAL 09–10 W","street":"Fallon St","between":"9th – 10th","side":"W","flag":true,"route":"E","walk":12},{"n":95,"code":"FAL 10–11 W","street":"Fallon St","between":"10th – 11th","side":"W","flag":true,"route":"E","walk":13},{"n":96,"code":"FAL 11–12 W","street":"Fallon St","between":"11th – 12th","side":"W","flag":true,"route":"E","walk":14},{"n":97,"code":"6TH BWY–FRK N","street":"6th St","between":"Broadway – Franklin","side":"N","flag":true,"route":"E","walk":1},{"n":98,"code":"6TH FRK–WEB N","street":"6th St","between":"Franklin – Webster","side":"N","flag":true,"route":"E","walk":2},{"n":99,"code":"6TH WEB–HAR N","street":"6th St","between":"Webster – Harrison","side":"N","flag":true,"route":"E","walk":3},{"n":100,"code":"6TH HAR–ALI N","street":"6th St","between":"Harrison – Alice","side":"N","flag":true,"route":"E","walk":4},{"n":101,"code":"6TH ALI–JAC N","street":"6th St","between":"Alice – Jackson","side":"N","flag":true,"route":"E","walk":5},{"n":102,"code":"6TH JAC–MAD N","street":"6th St","between":"Jackson – Madison","side":"N","flag":true,"route":"E","walk":6},{"n":103,"code":"6TH MAD–OAK N","street":"6th St","between":"Madison – Oak","side":"N","flag":true,"route":"E","walk":7},{"n":104,"code":"6TH OAK–FAL N","street":"6th St","between":"Oak – Fallon","side":"N","flag":true,"route":"E","walk":8},{"n":105,"code":"7TH BWY–FRK S","street":"7th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"F","walk":1},{"n":106,"code":"7TH BWY–FRK N","street":"7th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"F","walk":16},{"n":107,"code":"7TH FRK–WEB S","street":"7th St","between":"Franklin – Webster","side":"S","flag":false,"route":"F","walk":2},{"n":108,"code":"7TH FRK–WEB N","street":"7th St","between":"Franklin – Webster","side":"N","flag":false,"route":"F","walk":15},{"n":109,"code":"7TH WEB–HAR S","street":"7th St","between":"Webster – Harrison","side":"S","flag":false,"route":"F","walk":3},{"n":110,"code":"7TH WEB–HAR N","street":"7th St","between":"Webster – Harrison","side":"N","flag":false,"route":"F","walk":14},{"n":111,"code":"7TH HAR–ALI S","street":"7th St","between":"Harrison – Alice","side":"S","flag":false,"route":"F","walk":4},{"n":112,"code":"7TH HAR–ALI N","street":"7th St","between":"Harrison – Alice","side":"N","flag":false,"route":"F","walk":13},{"n":113,"code":"7TH ALI–JAC S","street":"7th St","between":"Alice – Jackson","side":"S","flag":false,"route":"F","walk":5},{"n":114,"code":"7TH ALI–JAC N","street":"7th St","between":"Alice – Jackson","side":"N","flag":false,"route":"F","walk":12},{"n":115,"code":"7TH JAC–MAD S","street":"7th St","between":"Jackson – Madison","side":"S","flag":false,"route":"F","walk":6},{"n":116,"code":"7TH JAC–MAD N","street":"7th St","between":"Jackson – Madison","side":"N","flag":false,"route":"F","walk":11},{"n":117,"code":"7TH MAD–OAK S","street":"7th St","between":"Madison – Oak","side":"S","flag":false,"route":"F","walk":7},{"n":118,"code":"7TH MAD–OAK N","street":"7th St","between":"Madison – Oak","side":"N","flag":false,"route":"F","walk":10},{"n":119,"code":"7TH OAK–FAL S","street":"7th St","between":"Oak – Fallon","side":"S","flag":true,"route":"F","walk":8},{"n":120,"code":"7TH OAK–FAL N","street":"7th St","between":"Oak – Fallon","side":"N","flag":true,"route":"F","walk":9},{"n":121,"code":"8TH BWY–FRK S","street":"8th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"G","walk":1},{"n":122,"code":"8TH BWY–FRK N","street":"8th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"G","walk":16},{"n":123,"code":"8TH FRK–WEB S","street":"8th St","between":"Franklin – Webster","side":"S","flag":false,"route":"G","walk":2},{"n":124,"code":"8TH FRK–WEB N","street":"8th St","between":"Franklin – Webster","side":"N","flag":false,"route":"G","walk":15},{"n":125,"code":"8TH WEB–HAR S","street":"8th St","between":"Webster – Harrison","side":"S","flag":false,"route":"G","walk":3},{"n":126,"code":"8TH WEB–HAR N","street":"8th St","between":"Webster – Harrison","side":"N","flag":false,"route":"G","walk":14},{"n":127,"code":"8TH HAR–ALI S","street":"8th St","between":"Harrison – Alice","side":"S","flag":false,"route":"G","walk":4},{"n":128,"code":"8TH HAR–ALI N","street":"8th St","between":"Harrison – Alice","side":"N","flag":false,"route":"G","walk":13},{"n":129,"code":"8TH ALI–JAC S","street":"8th St","between":"Alice – Jackson","side":"S","flag":false,"route":"G","walk":5},{"n":130,"code":"8TH ALI–JAC N","street":"8th St","between":"Alice – Jackson","side":"N","flag":false,"route":"G","walk":12},{"n":131,"code":"8TH JAC–MAD S","street":"8th St","between":"Jackson – Madison","side":"S","flag":false,"route":"G","walk":6},{"n":132,"code":"8TH JAC–MAD N","street":"8th St","between":"Jackson – Madison","side":"N","flag":false,"route":"G","walk":11},{"n":133,"code":"8TH MAD–OAK S","street":"8th St","between":"Madison – Oak","side":"S","flag":false,"route":"G","walk":7},{"n":134,"code":"8TH MAD–OAK N","street":"8th St","between":"Madison – Oak","side":"N","flag":false,"route":"G","walk":10},{"n":135,"code":"8TH OAK–FAL S","street":"8th St","between":"Oak – Fallon","side":"S","flag":false,"route":"G","walk":8},{"n":136,"code":"8TH OAK–FAL N","street":"8th St","between":"Oak – Fallon","side":"N","flag":false,"route":"G","walk":9},{"n":137,"code":"9TH BWY–FRK S","street":"9th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"H","walk":1},{"n":138,"code":"9TH BWY–FRK N","street":"9th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"H","walk":16},{"n":139,"code":"9TH FRK–WEB S","street":"9th St","between":"Franklin – Webster","side":"S","flag":false,"route":"H","walk":2},{"n":140,"code":"9TH FRK–WEB N","street":"9th St","between":"Franklin – Webster","side":"N","flag":false,"route":"H","walk":15},{"n":141,"code":"9TH WEB–HAR S","street":"9th St","between":"Webster – Harrison","side":"S","flag":false,"route":"H","walk":3},{"n":142,"code":"9TH WEB–HAR N","street":"9th St","between":"Webster – Harrison","side":"N","flag":false,"route":"H","walk":14},{"n":143,"code":"9TH HAR–ALI S","street":"9th St","between":"Harrison – Alice","side":"S","flag":false,"route":"H","walk":4},{"n":144,"code":"9TH HAR–ALI N","street":"9th St","between":"Harrison – Alice","side":"N","flag":false,"route":"H","walk":13},{"n":145,"code":"9TH ALI–JAC S","street":"9th St","between":"Alice – Jackson","side":"S","flag":false,"route":"H","walk":5},{"n":146,"code":"9TH ALI–JAC N","street":"9th St","between":"Alice – Jackson","side":"N","flag":false,"route":"H","walk":12},{"n":147,"code":"9TH JAC–MAD S","street":"9th St","between":"Jackson – Madison","side":"S","flag":false,"route":"H","walk":6},{"n":148,"code":"9TH JAC–MAD N","street":"9th St","between":"Jackson – Madison","side":"N","flag":false,"route":"H","walk":11},{"n":149,"code":"9TH MAD–OAK S","street":"9th St","between":"Madison – Oak","side":"S","flag":false,"route":"H","walk":7},{"n":150,"code":"9TH MAD–OAK N","street":"9th St","between":"Madison – Oak","side":"N","flag":false,"route":"H","walk":10},{"n":151,"code":"9TH OAK–FAL S","street":"9th St","between":"Oak – Fallon","side":"S","flag":false,"route":"H","walk":8},{"n":152,"code":"9TH OAK–FAL N","street":"9th St","between":"Oak – Fallon","side":"N","flag":false,"route":"H","walk":9},{"n":153,"code":"10TH BWY–FRK S","street":"10th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"I","walk":1},{"n":154,"code":"10TH BWY–FRK N","street":"10th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"I","walk":16},{"n":155,"code":"10TH FRK–WEB S","street":"10th St","between":"Franklin – Webster","side":"S","flag":false,"route":"I","walk":2},{"n":156,"code":"10TH FRK–WEB N","street":"10th St","between":"Franklin – Webster","side":"N","flag":false,"route":"I","walk":15},{"n":157,"code":"10TH WEB–HAR S","street":"10th St","between":"Webster – Harrison","side":"S","flag":false,"route":"I","walk":3},{"n":158,"code":"10TH WEB–HAR N","street":"10th St","between":"Webster – Harrison","side":"N","flag":false,"route":"I","walk":14},{"n":159,"code":"10TH HAR–ALI S","street":"10th St","between":"Harrison – Alice","side":"S","flag":false,"route":"I","walk":4},{"n":160,"code":"10TH HAR–ALI N","street":"10th St","between":"Harrison – Alice","side":"N","flag":false,"route":"I","walk":13},{"n":161,"code":"10TH ALI–JAC S","street":"10th St","between":"Alice – Jackson","side":"S","flag":false,"route":"I","walk":5},{"n":162,"code":"10TH ALI–JAC N","street":"10th St","between":"Alice – Jackson","side":"N","flag":false,"route":"I","walk":12},{"n":163,"code":"10TH JAC–MAD S","street":"10th St","between":"Jackson – Madison","side":"S","flag":false,"route":"I","walk":6},{"n":164,"code":"10TH JAC–MAD N","street":"10th St","between":"Jackson – Madison","side":"N","flag":false,"route":"I","walk":11},{"n":165,"code":"10TH MAD–OAK S","street":"10th St","between":"Madison – Oak","side":"S","flag":false,"route":"I","walk":7},{"n":166,"code":"10TH MAD–OAK N","street":"10th St","between":"Madison – Oak","side":"N","flag":false,"route":"I","walk":10},{"n":167,"code":"10TH OAK–FAL S","street":"10th St","between":"Oak – Fallon","side":"S","flag":false,"route":"I","walk":8},{"n":168,"code":"10TH OAK–FAL N","street":"10th St","between":"Oak – Fallon","side":"N","flag":false,"route":"I","walk":9},{"n":169,"code":"11TH BWY–FRK S","street":"11th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"J","walk":1},{"n":170,"code":"11TH BWY–FRK N","street":"11th St","between":"Broadway – Franklin","side":"N","flag":false,"route":"J","walk":16},{"n":171,"code":"11TH FRK–WEB S","street":"11th St","between":"Franklin – Webster","side":"S","flag":false,"route":"J","walk":2},{"n":172,"code":"11TH FRK–WEB N","street":"11th St","between":"Franklin – Webster","side":"N","flag":false,"route":"J","walk":15},{"n":173,"code":"11TH WEB–HAR S","street":"11th St","between":"Webster – Harrison","side":"S","flag":false,"route":"J","walk":3},{"n":174,"code":"11TH WEB–HAR N","street":"11th St","between":"Webster – Harrison","side":"N","flag":false,"route":"J","walk":14},{"n":175,"code":"11TH HAR–ALI S","street":"11th St","between":"Harrison – Alice","side":"S","flag":false,"route":"J","walk":4},{"n":176,"code":"11TH HAR–ALI N","street":"11th St","between":"Harrison – Alice","side":"N","flag":false,"route":"J","walk":13},{"n":177,"code":"11TH ALI–JAC S","street":"11th St","between":"Alice – Jackson","side":"S","flag":false,"route":"J","walk":5},{"n":178,"code":"11TH ALI–JAC N","street":"11th St","between":"Alice – Jackson","side":"N","flag":false,"route":"J","walk":12},{"n":179,"code":"11TH JAC–MAD S","street":"11th St","between":"Jackson – Madison","side":"S","flag":false,"route":"J","walk":6},{"n":180,"code":"11TH JAC–MAD N","street":"11th St","between":"Jackson – Madison","side":"N","flag":false,"route":"J","walk":11},{"n":181,"code":"11TH MAD–OAK S","street":"11th St","between":"Madison – Oak","side":"S","flag":false,"route":"J","walk":7},{"n":182,"code":"11TH MAD–OAK N","street":"11th St","between":"Madison – Oak","side":"N","flag":false,"route":"J","walk":10},{"n":183,"code":"11TH OAK–FAL S","street":"11th St","between":"Oak – Fallon","side":"S","flag":false,"route":"J","walk":8},{"n":184,"code":"11TH OAK–FAL N","street":"11th St","between":"Oak – Fallon","side":"N","flag":false,"route":"J","walk":9},{"n":185,"code":"12TH BWY–FRK S","street":"12th St","between":"Broadway – Franklin","side":"S","flag":false,"route":"J","walk":17},{"n":186,"code":"12TH FRK–WEB S","street":"12th St","between":"Franklin – Webster","side":"S","flag":false,"route":"J","walk":18},{"n":187,"code":"12TH WEB–HAR S","street":"12th St","between":"Webster – Harrison","side":"S","flag":false,"route":"J","walk":19},{"n":188,"code":"12TH HAR–ALI S","street":"12th St","between":"Harrison – Alice","side":"S","flag":false,"route":"J","walk":20},{"n":189,"code":"12TH ALI–JAC S","street":"12th St","between":"Alice – Jackson","side":"S","flag":false,"route":"J","walk":21},{"n":190,"code":"12TH JAC–MAD S","street":"12th St","between":"Jackson – Madison","side":"S","flag":false,"route":"J","walk":22},{"n":191,"code":"12TH MAD–OAK S","street":"12th St","between":"Madison – Oak","side":"S","flag":false,"route":"J","walk":23},{"n":192,"code":"12TH OAK–FAL S","street":"12th St","between":"Oak – Fallon","side":"S","flag":false,"route":"J","walk":24}],"routes":[{"id":"A","name":"Broadway and Franklin","order":[1,2,3,4,5,6,7,9,11,13,15,17,18,16,14,12,10,8]},{"id":"B","name":"Webster and Harrison","order":[19,21,23,25,27,29,30,28,26,24,22,20,31,33,35,37,39,41,42,40,38,36,34,32]},{"id":"C","name":"Alice and Jackson","order":[43,45,47,49,51,53,54,52,50,48,46,44,55,57,59,61,63,65,66,64,62,60,58,56]},{"id":"D","name":"Madison and Oak","order":[67,69,71,73,75,77,78,76,74,72,70,68,79,81,83,85,87,89,90,88,86,84,82,80]},{"id":"E","name":"6th St and Fallon","order":[97,98,99,100,101,102,103,104,91,92,93,94,95,96]},{"id":"F","name":"7th St","order":[105,107,109,111,113,115,117,119,120,118,116,114,112,110,108,106]},{"id":"G","name":"8th St","order":[121,123,125,127,129,131,133,135,136,134,132,130,128,126,124,122]},{"id":"H","name":"9th St","order":[137,139,141,143,145,147,149,151,152,150,148,146,144,142,140,138]},{"id":"I","name":"10th St","order":[153,155,157,159,161,163,165,167,168,166,164,162,160,158,156,154]},{"id":"J","name":"11th and 12th St","order":[169,171,173,175,177,179,181,183,184,182,180,178,176,174,172,170,185,186,187,188,189,190,191,192]}]};
+const COLS = ["seg_num", "seg_code", "route", "walk_stop", "street", "between", "side", "rater", "saved_at", "no_sidewalk", "q4_footpath", "q4_paved_trail", "q4_sidewalk", "q4_ped_street", "q5_asphalt", "q5_concrete", "q5_brick_stone", "q5_gravel", "q5_dirt_sand", "q6_condition", "q7_poles_signs", "q7_parked_cars", "q7_greenery", "q7_garbage_cans", "q7_other", "q7_none", "q8_fence", "q8_trees", "q8_hedges", "q8_landscape", "q8_grass", "q8_none", "q9_dist_from_curb", "q10_width", "q11_curb_cuts", "q12_complete", "q13_connections", "note"];
+const GS_CODE = "/**\n * Chinatown sidewalk audit \u2014 team sheet connector (Google Apps Script), version 4.\n * One connector serves both tools: the Street View audit and the field audit.\n *\n * Setup: open your Google Sheet > Extensions > Apps Script, paste this code, save.\n * Pick testSetup next to Run, click Run, and approve the permissions (Sheets + Drive, for photos).\n * Deploy > New deployment > Web app, Execute as: Me, Who has access: Anyone.\n * Updating: paste, save, then Deploy > Manage deployments > edit > Version: New version > Deploy.\n *\n * Tabs it keeps:\n *   GSV entries    columns A:AZ match the GSV Data sheet in the Street View workbook\n *   Field entries  columns A:AL match the Data sheet in the field workbook; then visit, photos, status, received_at\n *   Photos         one row per photo, with a link to the file in Drive\n * Photos are saved in a Drive folder named \"<sheet name> photos\", file names start with the segment code.\n */\nvar GSV_COLS = [\"seg_num\", \"seg_code\", \"route\", \"walk_stop\", \"street\", \"between\", \"side\", \"gsv_link\", \"rater\", \"audit_date\", \"image_date\", \"minutes\", \"view_quality\", \"obs_parked_cars\", \"obs_trucks\", \"obs_traffic\", \"obs_trees\", \"obs_scaffolding\", \"obs_weather_shade\", \"no_sidewalk\", \"q4_footpath\", \"q4_paved_trail\", \"q4_sidewalk\", \"q4_ped_street\", \"q4_cant_tell\", \"q5_asphalt\", \"q5_concrete\", \"q5_brick_stone\", \"q5_gravel\", \"q5_dirt_sand\", \"q5_cant_tell\", \"q6_condition\", \"q7_poles_signs\", \"q7_parked_cars\", \"q7_greenery\", \"q7_garbage_cans\", \"q7_other\", \"q7_none\", \"q7_cant_tell\", \"q8_fence\", \"q8_trees\", \"q8_hedges\", \"q8_landscape\", \"q8_grass\", \"q8_none\", \"q8_cant_tell\", \"q9_dist_from_curb\", \"q10_width\", \"q11_curb_cuts\", \"q12_complete\", \"q13_connections\", \"note\"];\nvar FIELD_COLS = [\"seg_num\", \"seg_code\", \"route\", \"walk_stop\", \"street\", \"between\", \"side\", \"rater\", \"saved_at\", \"no_sidewalk\", \"q4_footpath\", \"q4_paved_trail\", \"q4_sidewalk\", \"q4_ped_street\", \"q5_asphalt\", \"q5_concrete\", \"q5_brick_stone\", \"q5_gravel\", \"q5_dirt_sand\", \"q6_condition\", \"q7_poles_signs\", \"q7_parked_cars\", \"q7_greenery\", \"q7_garbage_cans\", \"q7_other\", \"q7_none\", \"q8_fence\", \"q8_trees\", \"q8_hedges\", \"q8_landscape\", \"q8_grass\", \"q8_none\", \"q9_dist_from_curb\", \"q10_width\", \"q11_curb_cuts\", \"q12_complete\", \"q13_connections\", \"note\"];\nvar PHOTO_COLS = ['filename', 'seg_code', 'rater', 'visit', 'photo_num', 'caption', 'taken_at', 'lat', 'lon', 'drive_url', 'received_at'];\nvar KINDS = {\n  gsv:   {tab: 'GSV entries',   cols: GSV_COLS,   extra: ['status', 'received_at'],                     key: ['seg_code', 'rater']},\n  field: {tab: 'Field entries', cols: FIELD_COLS, extra: ['visit', 'photos', 'status', 'received_at'], key: ['seg_code', 'rater', 'visit']}\n};\nvar VERSION = 4;\n\nfunction ss_() {\n  var ss = SpreadsheetApp.getActiveSpreadsheet();\n  if (!ss) throw new Error(\"This script isn't attached to a Google Sheet. Open your Google Sheet, choose Extensions > Apps Script, and paste the code there.\");\n  return ss;\n}\n\nfunction tab_(name, header) {\n  var ss = ss_();\n  var sh = ss.getSheetByName(name);\n  if (!sh) {\n    sh = ss.insertSheet(name);\n    sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold');\n    sh.setFrozenRows(1);\n    sh.setFrozenColumns(2);\n  }\n  return sh;\n}\nfunction kindTab_(k) { var K = KINDS[k]; return tab_(K.tab, K.cols.concat(K.extra)); }\nfunction photoTab_() { return tab_('Photos', PHOTO_COLS); }\n\nfunction photoFolder_() {\n  var props = PropertiesService.getScriptProperties();\n  var id = props.getProperty('PHOTO_FOLDER_ID');\n  if (id) { try { var f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }\n  var folder = DriveApp.createFolder(ss_().getName() + ' photos');\n  props.setProperty('PHOTO_FOLDER_ID', folder.getId());\n  return folder;\n}\n\nfunction json_(obj) {\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction clean_(v) {\n  if (v === undefined || v === null) return '';\n  if (typeof v === 'number') return v;\n  v = String(v).slice(0, 2000);\n  return /^[=+\\-@]/.test(v) ? \"'\" + v : v;   // never let text become a formula\n}\n\nfunction isTestRater_(r) { r = String(r); return r === '__setup_test__' || / \\(TEST\\)$/.test(r); }\n\n/** Finds the data row (2-based sheet row) whose key columns match, or 0. */\nfunction findRow_(sh, header, keyNames, d) {\n  var last = sh.getLastRow();\n  if (last < 2) return 0;\n  var idx = keyNames.map(function (k) { return header.indexOf(k); });\n  var vals = sh.getRange(2, 1, last - 1, header.length).getValues();\n  for (var i = 0; i < vals.length; i++) {\n    var hit = true;\n    for (var j = 0; j < idx.length; j++) {\n      if (String(vals[i][idx[j]]) !== String(d[keyNames[j]] === undefined ? '' : d[keyNames[j]])) { hit = false; break; }\n    }\n    if (hit) return i + 2;\n  }\n  return 0;\n}\n\nfunction statusOf_(d) {\n  if (Number(d.view_quality) === 3) return 'Not viewable';\n  if (Number(d.no_sidewalk) === 1) return 'No sidewalk';\n  return 'Complete';\n}\n\nfunction saveEntry_(kind, d) {\n  var K = KINDS[kind];\n  if (typeof d.seg_code !== 'string' || !d.seg_code || d.seg_code.length > 40 || typeof d.rater !== 'string' || !d.rater) {\n    return {ok: false, error: 'Missing segment code or rater'};\n  }\n  var sh = kindTab_(kind);\n  var header = K.cols.concat(K.extra);\n  var target = findRow_(sh, header, K.key, d);\n  var row = K.cols.map(function (c) { return clean_(d[c]); });\n  var extra = {visit: clean_(d.visit), photos: clean_(d.photos), status: statusOf_(d), received_at: new Date().toISOString()};\n  K.extra.forEach(function (c) { row.push(extra[c]); });\n  if (target) sh.getRange(target, 1, 1, row.length).setValues([row]);\n  else sh.appendRow(row);\n  return {ok: true, replaced: !!target};\n}\n\nfunction savePhoto_(d) {\n  if (!d.filename || !/^[A-Za-z0-9_.\\-]+\\.(jpg|jpeg|png)$/i.test(d.filename) || !d.data || !d.seg_code || !d.rater) {\n    return {ok: false, error: 'Photo is missing its file name, data, segment or rater'};\n  }\n  var folder = photoFolder_();\n  var old = folder.getFilesByName(d.filename);\n  while (old.hasNext()) old.next().setTrashed(true);\n  var blob = Utilities.newBlob(Utilities.base64Decode(d.data), d.mime || 'image/jpeg', d.filename);\n  var file = folder.createFile(blob);\n  var sh = photoTab_();\n  var row = [d.filename, d.seg_code, d.rater, d.visit, d.photo_num, d.caption, d.taken_at, d.lat, d.lon, file.getUrl(), new Date().toISOString()].map(clean_);\n  var target = findRow_(sh, PHOTO_COLS, ['filename'], d);\n  if (target) sh.getRange(target, 1, 1, row.length).setValues([row]); else sh.appendRow(row);\n  return {ok: true, url: file.getUrl(), id: file.getId()};\n}\n\nfunction deletePhoto_(d) {\n  if (!d.filename) return {ok: false, error: 'No file name'};\n  var folder = photoFolder_(), n = 0;\n  var it = folder.getFilesByName(d.filename);\n  while (it.hasNext()) { it.next().setTrashed(true); n++; }\n  var sh = photoTab_(), target = findRow_(sh, PHOTO_COLS, ['filename'], d);\n  if (target) sh.deleteRow(target);\n  return {ok: true, removed: n};\n}\n\n/** Removes rows and photos made by Check setup and Test mode (rater \"__setup_test__\" or ending in \"(TEST)\"). */\nfunction deleteTestRows_() {\n  var deleted = 0;\n  Object.keys(KINDS).forEach(function (k) {\n    var ss = ss_(), sh = ss.getSheetByName(KINDS[k].tab);\n    if (!sh) return;\n    var header = KINDS[k].cols.concat(KINDS[k].extra), rc = header.indexOf('rater') + 1, last = sh.getLastRow();\n    if (last < 2) return;\n    var raters = sh.getRange(2, rc, last - 1, 1).getValues();\n    for (var i = raters.length - 1; i >= 0; i--) if (isTestRater_(raters[i][0])) { sh.deleteRow(i + 2); deleted++; }\n  });\n  var ph = ss_().getSheetByName('Photos');\n  if (ph && ph.getLastRow() > 1) {\n    var vals = ph.getRange(2, 1, ph.getLastRow() - 1, PHOTO_COLS.length).getValues();\n    var folder = null;\n    for (var i = vals.length - 1; i >= 0; i--) {\n      if (isTestRater_(vals[i][2])) {\n        folder = folder || photoFolder_();\n        var it = folder.getFilesByName(String(vals[i][0]));\n        while (it.hasNext()) it.next().setTrashed(true);\n        ph.deleteRow(i + 2); deleted++;\n      }\n    }\n  }\n  return {ok: true, deleted: deleted};\n}\n\nfunction doPost(e) {\n  var lock = LockService.getScriptLock();\n  lock.waitLock(30000);\n  try {\n    var d = JSON.parse(e.postData.contents);\n    if (!d) return json_({ok: false, error: 'Empty request'});\n    if (d._action === 'delete_test') return json_(deleteTestRows_());\n    if (d._action === 'photo') return json_(savePhoto_(d));\n    if (d._action === 'photo_delete') return json_(deletePhoto_(d));\n    var kind = d._kind === 'field' ? 'field' : 'gsv';\n    return json_(saveEntry_(kind, d));\n  } catch (err) {\n    return json_({ok: false, version: VERSION, error: String(err && err.message || err)});\n  } finally {\n    lock.releaseLock();\n  }\n}\n\nfunction doGet(e) {\n  try {\n    var p = (e && e.parameter) || {};\n    var kind = p.kind === 'field' ? 'field' : 'gsv';\n    var K = KINDS[kind], sh = kindTab_(kind), header = K.cols.concat(K.extra);\n    var last = sh.getLastRow(), rows = [];\n    if (p.list && last > 1) {\n      var ci = header.indexOf('seg_code'), ri = header.indexOf('rater'), si = header.indexOf('status'), vi = header.indexOf('visit'), pi = header.indexOf('photos');\n      sh.getRange(2, 1, last - 1, header.length).getValues().forEach(function (r) {\n        var o = {seg_code: r[ci], rater: r[ri], status: r[si]};\n        if (vi >= 0) { o.visit = r[vi]; o.photos = r[pi]; }\n        rows.push(o);\n      });\n    }\n    return json_({ok: true, version: VERSION, kind: kind, count: Math.max(0, last - 1), rows: rows});\n  } catch (err) {\n    return json_({ok: false, version: VERSION, error: String(err && err.message || err)});\n  }\n}\n\n/** Run once from the editor (pick testSetup, click Run) to approve permissions and create the tabs and photo folder. */\nfunction testSetup() {\n  var g = kindTab_('gsv'), f = kindTab_('field'), p = photoTab_(), folder = photoFolder_();\n  Logger.log('Connected to \"' + ss_().getName() + '\". Tabs: ' + [g.getName(), f.getName(), p.getName()].join(', ') + '. Photo folder: ' + folder.getUrl());\n}\n";
+const SEG = {}; DATA.segments.forEach(s => SEG[s.n] = s);
+const SIDE = {N:"North",S:"South",E:"East",W:"West"};
+const KEY = "peds-field-chinatown-v1";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- storage: entries in localStorage ----------
+let store = {entries:{}, settings:{rater:"", url:"", route:"A", visit:"1", test:false}, team:{}};
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.entries) { store = Object.assign(store, s); store.settings = Object.assign({rater:"", url:"", route:"A", visit:"1", test:false}, s.settings); } } catch(e) {}
+let storageOk = true;
+function persist(){ try { localStorage.setItem(KEY, JSON.stringify(store)); storageOk = true; } catch(e) { storageOk = false; } }
+
+// ---------- identity ----------
+const raterEl = document.getElementById("rater"), visitEl = document.getElementById("visit");
+raterEl.value = store.settings.rater || ""; visitEl.value = store.settings.visit || "1";
+const baseRater = () => raterEl.value.trim();
+const rater = () => baseRater() ? baseRater() + (store.settings.test ? " (TEST)" : "") : "";
+const visit = () => +visitEl.value;
+const isTest = r => / \(TEST\)$/.test(String(r)) || r === "__setup_test__";
+const ekey = (code, r = rater(), v = visit()) => `${code}|${r}|${v}`;
+const mine = code => store.entries[ekey(code)];
+raterEl.addEventListener("change", () => { store.settings.rater = baseRater(); persist(); setTimeout(() => { if (view === "list") renderList(); updateSync(); }, 300); });
+visitEl.addEventListener("change", () => { store.settings.visit = visitEl.value; persist(); if (view === "form") openSeg(current); else renderList(); });
+const slug = s => String(s).replace(/–/g, "-").replace(/[^A-Za-z0-9-]+/g, "_").replace(/^_+|_+$/g, "");
+
+// ---------- questions ----------
+const Q = [
+  {key:"q4", n:4, t:"Type(s) of pedestrian facility", multi:true, opts:[["footpath","Footpath (worn dirt)"],["paved_trail","Paved trail"],["sidewalk","Sidewalk"],["ped_street","Pedestrian street"]]},
+  {key:"q5", n:5, t:"Path material", multi:true, opts:[["asphalt","Asphalt"],["concrete","Concrete"],["brick_stone","Paving bricks / flat stone"],["gravel","Gravel"],["dirt_sand","Dirt or sand"]]},
+  {key:"q6_condition", n:6, t:"Path condition / maintenance", opts:["Poor (many bumps/cracks/holes)","Fair (some)","Good (very few)","Under repair"]},
+  {key:"q7", n:7, t:"Path obstructions", multi:true, none:"none", opts:[["poles_signs","Poles or signs"],["parked_cars","Parked cars"],["greenery","Greenery"],["garbage_cans","Garbage cans"],["other","Other"],["none","None"]]},
+  {key:"q8", n:8, t:"Buffers between road and path", multi:true, none:"none", opts:[["fence","Fence"],["trees","Trees"],["hedges","Hedges"],["landscape","Landscape"],["grass","Grass"],["none","None"]]},
+  {key:"q9_dist_from_curb", n:9, t:"Path distance from curb", opts:["At edge","Less than 5 ft","More than 5 ft"]},
+  {key:"q10_width", n:10, t:"Sidewalk width", opts:["Less than 4 ft","4 to 8 ft","More than 8 ft"]},
+  {key:"q11_curb_cuts", n:11, t:"Curb cuts", opts:["None","1 to 4","More than 4"]},
+  {key:"q12_complete", n:12, t:"Sidewalk completeness / continuity", opts:["Complete","Incomplete"]},
+];
+const corner = s => { const a = s.between.split(" – ")[0]; const x = a === "Broadway" ? "Broadway" : a + " St";
+  return {label: x, url: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${s.street} & ${x}, Oakland, CA`)}; };
+
+// ---------- list ----------
+let route = store.settings.route || "A", current = null, form = null, view = "list";
+function teamFor(code){ const t = store.team[code] || {}; return Object.keys(t).filter(k => { const [r, v] = k.split("|"); return r !== rater() && +v === visit() && isTest(r) === !!store.settings.test; }).length; }
+function setHTML(el, html){ if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+function renderList(){
+  const r = DATA.routes.find(x => x.id === route);
+  const done = r.order.filter(n => mine(SEG[n].code)).length;
+  setHTML(document.getElementById("viewList"), `
+    <div class="routes" role="group" aria-label="Routes">${DATA.routes.map(x => { const d = x.order.filter(n => mine(SEG[n].code)).length;
+      return `<button class="rchip" data-r="${x.id}" aria-pressed="${x.id===route}"><b>${x.id}</b><small>${d}/${x.order.length}</small></button>`; }).join("")}</div>
+    <div class="rhead" style="margin-top:12px"><h2>Route ${r.id} · ${esc(r.name)}</h2><span class="eyebrow">Visit ${visit()} · ${done} of ${r.order.length}</span></div>
+    <div class="bar" style="margin:8px 0 12px"><i style="width:${Math.round(100*done/r.order.length)}%"></i></div>
+    <ul class="stops">${r.order.map((n,k) => { const s = SEG[n]; const e = mine(s.code); const tc = teamFor(s.code);
+      const pills = (e ? '<span class="pill done">Done</span>' : tc ? `<span class="pill team">${tc} other${tc>1?"s":""}</span>` : s.flag ? '<span class="pill flag">Verify</span>' : "");
+      return `<li><button class="stop" data-n="${n}"><span class="k">${k+1}</span><span><span class="c">${s.code}</span><br><span class="sub">${esc(s.street)}, ${s.between}, ${SIDE[s.side].toLowerCase()} side</span></span><span class="pills">${pills}</span></button></li>`; }).join("")}</ul>
+    <p class="status">Walk in this order: up one side of each street, back down the other.</p>`);
+}
+document.getElementById("viewList").addEventListener("click", e => {
+  const c = e.target.closest(".rchip"); if (c) { route = c.dataset.r; store.settings.route = route; persist(); renderList(); return; }
+  const b = e.target.closest(".stop"); if (b) openSeg(+b.dataset.n);
+});
+
+// ---------- form ----------
+function blank(){ const f = {no_sidewalk:false, note:"", q13:""}; Q.forEach(q => f[q.key] = q.multi ? [] : null); return f; }
+function fromEntry(e){ const f = blank(); f.no_sidewalk = e.no_sidewalk === 1; f.note = e.note || "";
+  Q.forEach(q => { if (q.multi) f[q.key] = q.opts.filter(([k]) => e[q.key+"_"+k] === 1).map(([k]) => k); else f[q.key] = e[q.key] || null; });
+  f.q13 = e.q13_connections ?? ""; return f; }
+function showView(v){
+  view = v;
+  document.getElementById("viewList").hidden = v !== "list";
+  document.getElementById("viewForm").hidden = v !== "form";
+  document.getElementById("savebar").hidden = v !== "form";
+  if (v === "list") renderList();
+}
+async function openSeg(n){
+  current = n; const e = mine(SEG[n].code); form = e ? fromEntry(e) : blank();
+  showView("form"); await renderForm(); window.scrollTo(0, 0); setStatus("");
+}
+const pressed = b => `aria-pressed="${b}"`;
+async function renderForm(errs = {}){
+  const s = SEG[current]; const r = DATA.routes.find(x => x.id === s.route); const e = mine(s.code); const c = corner(s); const tc = teamFor(s.code);
+  const body = form.no_sidewalk ? "" : Q.map(q => `
+    <fieldset id="f-${q.key}" class="${errs[q.key]?"err":""}"><legend><span class="qn">${q.n}</span>${q.t}<span class="hint">${q.multi?"All that apply":"Pick one"}</span></legend>
+      <div class="opts">${q.multi ? q.opts.map(([k,l]) => `<button class="opt multi" data-q="${q.key}" data-v="${k}" ${pressed(form[q.key].includes(k))}>${l}</button>`).join("")
+        : q.opts.map((l,i) => `<button class="opt" data-q="${q.key}" data-v="${i+1}" ${pressed(form[q.key]===i+1)}><span class="k">${i+1}</span>${l}</button>`).join("")}</div>
+      ${errs[q.key]?`<div class="emsg">${errs[q.key]}</div>`:""}</fieldset>`).join("") + `
+    <fieldset id="f-q13" class="${errs.q13?"err":""}"><legend><span class="qn">13</span>Connections to other sidewalks / crosswalks</legend>
+      <div class="stepper"><button data-step="-1" aria-label="One fewer">−</button><input type="number" id="q13" min="0" max="20" inputmode="numeric" value="${esc(form.q13)}"><button data-step="1" aria-label="One more">+</button></div>
+      ${errs.q13?`<div class="emsg">${errs.q13}</div>`:""}</fieldset>`;
+  document.getElementById("viewForm").innerHTML = `
+    <div class="seghead"><span class="eyebrow">Route ${s.route} · stop ${s.walk} of ${r.order.length} · visit ${visit()}</span>
+      <span class="code">${s.code}</span><span class="meta">${esc(s.street)}, ${s.between}, ${SIDE[s.side].toLowerCase()} side</span>
+      <a class="maplink" href="${c.url}" target="_blank" rel="noopener">Map: ${esc(s.street)} &amp; ${esc(c.label)} ↗</a></div>
+    ${s.flag?'<div class="notice warn">The sidewalk here may be missing (freeway frontage or tube portal). Confirm it exists first.</div>':""}
+    ${e?'<div class="notice warn">You already rated this segment on this visit. Saving replaces your earlier answers.</div>':""}
+    ${tc?`<div class="status">${tc} other rater${tc>1?"s have":" has"} rated this segment on visit ${visit()}.</div>`:""}
+    <fieldset id="f-q0"><legend><span class="qn">0</span>No pedestrian facility</legend>
+      <div class="opts"><button class="opt multi" data-q="no_sidewalk" data-v="1" ${pressed(form.no_sidewalk)}>No sidewalk on this block face (skip the rest)</button></div></fieldset>
+    ${body}
+    <fieldset><legend>Note <span class="hint">Optional</span></legend><textarea id="note" rows="2" placeholder="Construction on the north half, scaffolding over sidewalk">${esc(form.note)}</textarea></fieldset>`;
+}
+function syncInputs(){ const g = id => document.getElementById(id); if (g("note")) form.note = g("note").value; if (g("q13")) form.q13 = g("q13").value; }
+const vf = document.getElementById("viewForm");
+vf.addEventListener("input", syncInputs);
+vf.addEventListener("click", e => {
+  const st = e.target.closest("[data-step]");
+  if (st) { const el = document.getElementById("q13"); el.value = Math.max(0, (parseInt(el.value,10)||0) + +st.dataset.step); form.q13 = el.value; clearErr("q13"); return; }
+  const b = e.target.closest(".opt"); if (!b) return;
+  syncInputs();
+  const q = b.dataset.q, v = b.dataset.v;
+  if (q === "no_sidewalk") { form.no_sidewalk = !form.no_sidewalk; renderForm(); return; }
+  const def = Q.find(x => x.key === q);
+  if (def.multi) {
+    if (form[q].includes(v)) form[q] = form[q].filter(x => x !== v);
+    else if (def.none && v === def.none) form[q] = [v];
+    else form[q] = form[q].filter(x => x !== def.none).concat(v);
+    document.querySelectorAll(`#f-${q} .opt`).forEach(o => o.setAttribute("aria-pressed", form[q].includes(o.dataset.v)));
+  } else { form[q] = form[q] === +v ? null : +v; document.querySelectorAll(`#f-${q} .opt`).forEach(o => o.setAttribute("aria-pressed", form[q] === +o.dataset.v)); }
+  clearErr(q);
+});
+function clearErr(k){ const f = document.getElementById("f-"+k); if (f && f.classList.contains("err")) { f.classList.remove("err"); const m = f.querySelector(".emsg"); if (m) m.remove(); } }
+function validate(){
+  const errs = {}; if (form.no_sidewalk) return errs;
+  Q.forEach(q => { if (q.multi ? !form[q.key].length : !form[q.key]) errs[q.key] = q.multi ? "Pick at least one (or None)." : "Pick one."; });
+  if (form.q13 === "" || isNaN(+form.q13) || +form.q13 < 0 || !Number.isInteger(+form.q13)) errs.q13 = "Enter the number of connections (0 or more).";
+  return errs;
+}
+const pad = n => String(n).padStart(2, "0");
+const stamp = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function toRow(){
+  const s = SEG[current]; const row = {}; COLS.forEach(c => row[c] = "");
+  Object.assign(row, {seg_num:s.n, seg_code:s.code, route:s.route, walk_stop:s.walk, street:s.street, between:s.between, side:SIDE[s.side], rater:rater(), saved_at:stamp(), no_sidewalk: form.no_sidewalk ? 1 : 0, note:(form.note||"").trim()});
+  if (!form.no_sidewalk) {
+    Q.forEach(q => { if (q.multi) q.opts.forEach(([k]) => row[q.key+"_"+k] = form[q.key].includes(k) ? 1 : 0); else row[q.key] = form[q.key]; });
+    row.q13_connections = +form.q13;
+  }
+  return row;
+}
+
+// ---------- save ----------
+const statusEl = document.getElementById("saveStatus");
+function setStatus(t, cls = ""){ statusEl.textContent = t; statusEl.className = "status " + cls; }
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  syncInputs();
+  if (!baseRater()) { setStatus("Enter your name at the top first.", "bad"); raterEl.focus(); return; }
+  const errs = validate();
+  if (Object.keys(errs).length) { await renderForm(errs); const f = document.querySelector("fieldset.err"); f && f.scrollIntoView({behavior:"smooth", block:"center"}); setStatus(`${Object.keys(errs).length} question${Object.keys(errs).length>1?"s":""} still need an answer.`, "bad"); return; }
+  const row = toRow(); const k = ekey(row.seg_code);
+  store.entries[k] = Object.assign(row, {_visit: visit(), _sent: false}); persist();
+  if (!storageOk) { setStatus("This browser blocked saving. Download your CSV from Data now so nothing is lost.", "bad"); return; }
+  const s = SEG[current]; const r = DATA.routes.find(x => x.id === s.route);
+  const next = r.order.slice(r.order.indexOf(current) + 1).find(n => !mine(SEG[n].code));
+  const msg = `Saved ${row.seg_code}.` + (store.settings.url ? (navigator.onLine === false ? " No signal; it will send when you're back online." : " Sending to the team sheet…") : "");
+  if (next) await openSeg(next); else { current = null; showView("list"); }
+  setStatus(msg, "ok"); updateSync(); syncSoon(0);
+});
+document.getElementById("backBtn").addEventListener("click", () => { syncInputs(); showView("list"); });
+
+// ---------- sync ----------
+let syncing = false, syncTimer = null;
+function syncSoon(ms = 800){ clearTimeout(syncTimer); syncTimer = setTimeout(syncAll, ms); }
+async function post(body){
+  const r = await fetch(store.settings.url, {method:"POST", body: JSON.stringify(body)});
+  return await r.json();
+}
+async function syncAll(){
+  if (!store.settings.url || syncing) return updateSync();
+  if (navigator.onLine === false) return updateSync();
+  syncing = true; let failed = 0;
+  try {
+    for (const [k, e] of Object.entries(store.entries)) {
+      if (e._sent) continue;
+      const body = Object.assign({}, e, {_kind:"field", visit: e._visit}); delete body._sent; delete body._visit;
+      try { const j = await post(body); if (j && j.ok) { store.entries[k]._sent = true; persist(); } else failed++; } catch (err) { failed++; break; }
+    }
+  } finally { syncing = false; }
+  await updateSync();
+  if (view === "list") renderList();
+  if (failed) syncSoon(60000);
+}
+async function counts(){ return {ent: Object.values(store.entries).filter(e => !e._sent).length}; }
+async function updateSync(){
+  const dot = document.getElementById("syncDot"), t = document.getElementById("syncText");
+  const c = await counts();
+  if (!store.settings.url) { dot.className = "dot"; t.textContent = "Saving on this phone only"; return; }
+  const n = c.ent;
+  dot.className = "dot " + (n ? "warn" : "ok");
+  t.textContent = n ? `${c.ent} entr${c.ent===1?"y":"ies"} waiting to send` + (navigator.onLine === false ? " (offline)" : "") : "All sent to team sheet";
+}
+window.addEventListener("online", () => syncSoon(500));
+window.addEventListener("offline", updateSync);
+setInterval(() => { if (!syncing) counts().then(c => { if (c.ent) syncAll(); }); }, 90000);
+
+// ---------- team sheet ----------
+function normUrl(u){ u = String(u || "").trim().replace(/[?#].*$/, ""); return u.replace(/^(https:\/\/script\.google\.com\/macros)\/u\/\d+(\/s\/)/, "$1$2").replace(/^(https:\/\/script\.google\.com)\/a\/[^/]+(\/macros\/s\/)/, "$1$2"); }
+function urlProblem(u){
+  if (/\/dev$/.test(u)) return "That's the test-deployment link (ends in /dev), which only works for its owner. Use the Web app URL that ends in /exec.";
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u)) return "That doesn't look like a web app URL. It should look like https://script.google.com/macros/s/…/exec.";
+  return "";
+}
+async function probe(url){
+  let r, text;
+  try { r = await fetch(url + "?list=1&kind=field&t=" + Date.now()); text = await r.text(); }
+  catch (e) { return {ok:false, why: navigator.onLine === false ? "This phone is offline. Try again with signal." : "The phone couldn't read an answer. Usually Google sent a sign-in or error page instead of data. Open the test link to see which."}; }
+  let j = null; try { j = JSON.parse(text); } catch (e) {}
+  if (j && j.ok && !(j.version >= 4)) return {ok:false, why:"The sheet is running older connector code that can't store field entries. Paste the code from this tool's Team sheet panel, run testSetup, and deploy a New version."};
+  if (j && j.ok) return {ok:true, j};
+  if (j && j.error) return {ok:false, why:"The sheet's script answered with an error: " + j.error};
+  if (/accounts\.google\.com|ServiceLogin|Sign in/i.test(text)) return {ok:false, why:"Google asked for a sign-in, so the web app isn't open to Anyone."};
+  if (/Script function not found: doGet/i.test(text)) return {ok:false, why:"The deployed version doesn't contain the connector code. Deploy a New version."};
+  return {ok:false, why:"The URL answered with something other than data. Open the test link to see what it says."};
+}
+const failHTML = (why, url) => `${esc(why)}<br><a href="${esc(url + "?list=1&kind=field")}" target="_blank" rel="noopener">Open the test link ↗</a> — it should show text starting with {"ok":true.`;
+async function pullTeam(){
+  if (!store.settings.url) return false;
+  const p = await probe(store.settings.url); if (!p.ok) return false;
+  store.team = {}; (p.j.rows || []).forEach(x => { (store.team[x.seg_code] = store.team[x.seg_code] || {})[`${x.rater}|${x.visit}`] = x.status; });
+  persist(); if (view === "list") renderList(); return true;
+}
+const setupDlg = document.getElementById("setupDlg");
+document.getElementById("gsCode").textContent = GS_CODE;
+document.getElementById("setupBtn").addEventListener("click", () => { document.getElementById("sheetUrl").value = store.settings.url || ""; document.getElementById("urlStatus").textContent = ""; setupDlg.showModal(); });
+document.getElementById("closeSetup").addEventListener("click", () => { const u = normUrl(document.getElementById("sheetUrl").value); store.settings.url = u && !urlProblem(u) ? u : store.settings.url; persist(); setupDlg.close(); updateSync(); if (store.settings.url) { pullTeam(); syncSoon(); } });
+document.getElementById("testUrl").addEventListener("click", async () => {
+  const inp = document.getElementById("sheetUrl"), st = document.getElementById("urlStatus"); const u = normUrl(inp.value); inp.value = u;
+  const bad = urlProblem(u); if (bad) { st.textContent = bad; st.className = "status bad"; return; }
+  st.textContent = "Checking…"; st.className = "status";
+  const p = await probe(u);
+  if (p.ok) { store.settings.url = u; persist(); st.textContent = `Connected. The sheet has ${p.j.count} field entr${p.j.count===1?"y":"ies"}.`; st.className = "status ok"; pullTeam(); syncSoon(); }
+  else { st.innerHTML = failHTML(p.why, u); st.className = "status bad"; }
+  updateSync();
+});
+document.getElementById("copyCode").addEventListener("click", () => { const st = document.getElementById("codeStatus");
+  try { navigator.clipboard.writeText(GS_CODE).then(() => st.textContent = "Copied", () => st.textContent = "Select the code below and copy it."); } catch (e) { st.textContent = "Select the code below and copy it."; } });
+
+// ---------- data ----------
+const dataDlg = document.getElementById("dataDlg");
+function csvText(rows){
+  const q = v => { if (typeof v !== "number") { v = String(v ?? ""); if (/^[=+\-@]/.test(v)) v = "'" + v; } else v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  return [COLS.join(",")].concat(rows.map(r => COLS.map(c => q(r[c])).join(","))).join("\n");
+}
+function save(name, blob){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+async function renderData(){
+  const all = Object.values(store.entries);
+  const groups = {}; all.forEach(e => { const g = `${e.rater}|${e._visit}`; groups[g] = groups[g] || {n:0, unsent:0}; groups[g].n++; if (!e._sent) groups[g].unsent++; });
+  document.getElementById("dataSummary").innerHTML = Object.keys(groups).length
+    ? `<table class="mini"><tr><th>Rater</th><th>Visit</th><th>Segments</th><th>Not sent</th></tr>${Object.entries(groups).map(([g, v]) => { const [r, vis] = g.split("|");
+        return `<tr><td>${esc(r)}</td><td>${vis}</td><td>${v.n}</td><td>${v.unsent}</td></tr>`; }).join("")}</table>`
+    : '<p class="status">Nothing saved on this phone yet.</p>';
+}
+document.getElementById("dataBtn").addEventListener("click", async () => { await renderData(); document.getElementById("dataStatus").textContent = ""; dataDlg.showModal(); });
+document.getElementById("closeData").addEventListener("click", () => dataDlg.close());
+document.getElementById("resend").addEventListener("click", async () => {
+  const st = document.getElementById("dataStatus");
+  if (!store.settings.url) { st.textContent = "Add the team sheet link first (Team sheet button)."; return; }
+  st.textContent = "Sending…"; await syncAll(); const c = await counts(); await renderData();
+  st.textContent = c.ent ? `Still waiting: ${c.ent} entr${c.ent===1?"y":"ies"}. Try again with better signal.` : "Everything on this phone is in the team sheet.";
+});
+const visibleRows = () => Object.values(store.entries).filter(e => +e._visit === visit() && isTest(e.rater) === !!store.settings.test).sort((a, b) => a.seg_num - b.seg_num || String(a.rater).localeCompare(b.rater));
+document.getElementById("dlCsv").addEventListener("click", () => {
+  const rows = visibleRows();
+  save(`chinatown_field_visit${visit()}_${slug(baseRater() || "all")}_${new Date().toISOString().slice(0,10)}.csv`, new Blob([csvText(rows)], {type:"text/csv"}));
+  document.getElementById("dataStatus").textContent = `Downloaded ${rows.length} rows for visit ${visit()}.`;
+});
+
+// ---------- test mode ----------
+const testBtn = document.getElementById("testBtn"), testbar = document.getElementById("testbar");
+function applyTestMode(){ const on = !!store.settings.test; testBtn.setAttribute("aria-pressed", on); testbar.hidden = !on; updateSync(); if (view === "form" && current) openSeg(current); else showView("list"); }
+testBtn.addEventListener("click", () => { store.settings.test = !store.settings.test; persist(); document.getElementById("testStatus").textContent = ""; applyTestMode(); });
+document.getElementById("exitTest").addEventListener("click", () => { store.settings.test = false; persist(); applyTestMode(); });
+document.getElementById("clearTest").addEventListener("click", async () => {
+  const st = document.getElementById("testStatus");
+  const keys = Object.keys(store.entries).filter(k => isTest(store.entries[k].rater)); keys.forEach(k => delete store.entries[k]); persist();
+  let msg = `Removed ${keys.length} test entr${keys.length===1?"y":"ies"} from this phone.`;
+  if (store.settings.url) { try { const j = await post({_action:"delete_test"}); msg += j && j.ok ? ` Removed ${j.deleted} test row${j.deleted===1?"":"s"} from the team sheet.` : " The team sheet didn't remove its test rows."; } catch (e) { msg += " Couldn't reach the team sheet to remove its test rows."; } await pullTeam(); }
+  st.textContent = msg; updateSync(); if (view === "form" && current) openSeg(current); else showView("list");
+});
+
+// ---------- setup check ----------
+const checkDlg = document.getElementById("checkDlg"), checksEl = document.getElementById("checks");
+const CHECKS = [
+  ["storage", "This phone can save entries"], ["reload", "Saved work survives reopening"],
+  ["connect", "Team sheet answers"], ["write", "A field entry reaches the sheet"], ["read", "The sheet shows that entry"],
+  ["clean", "Test rows can be removed"],
+];
+function drawChecks(res = {}){ checksEl.innerHTML = CHECKS.map(([k, t]) => { const r = res[k] || {s:"", m:""}; const sym = {pass:"✓", fail:"✕", skip:"–"}[r.s] || "";
+  return `<li><span class="mark ${r.s}">${sym}</span><div><b>${t}</b><div class="why">${r.html || esc(r.m)}</div></div></li>`; }).join(""); }
+async function runChecks(){
+  const res = {}; const set = (k, s, m, html) => { res[k] = {s, m, html}; drawChecks(res); };
+  const btn = document.getElementById("runChecks"); btn.disabled = true;
+  try { localStorage.setItem("peds-field-probe", "1"); const ok = localStorage.getItem("peds-field-probe") === "1"; localStorage.removeItem("peds-field-probe"); set("storage", ok ? "pass" : "fail", ok ? "Saving works." : "This browser didn't keep the test value."); }
+  catch (e) { set("storage", "fail", "This browser blocks saving (private window or strict privacy settings). Use a normal window."); }
+  let prev = null; try { prev = localStorage.getItem("peds-field-marker"); localStorage.setItem("peds-field-marker", new Date().toISOString()); } catch (e) {}
+  set("reload", prev ? "pass" : "skip", prev ? `Found the marker from ${new Date(prev).toLocaleString()}.` : "Marker saved. Close this tab, reopen the same link, and run the checks again to confirm.");
+  const url = store.settings.url;
+  if (!url) ["connect","write","read","clean"].forEach(k => set(k, "skip", "No team sheet link set. Skip this if raters will send their CSVs instead."));
+  else {
+    const pr = await probe(url);
+    if (!pr.ok) { set("connect", "fail", pr.why, failHTML(pr.why, url)); ["write","read","clean"].forEach(k => set(k, "skip", "Skipped because the sheet didn't answer.")); }
+    else {
+      set("connect", "pass", `Connected (connector version ${pr.j.version}). ${pr.j.count} field entr${pr.j.count===1?"y":"ies"} so far.`);
+      const row = {}; COLS.forEach(c => row[c] = ""); Object.assign(row, {_kind:"field", seg_code:"SETUP-CHECK", rater:"__setup_test__", visit:visit(), saved_at:stamp(), no_sidewalk:1, note:"Setup check row, safe to delete"});
+      let w = null; try { w = await post(row); } catch (e) {}
+      set("write", w && w.ok ? "pass" : "fail", w && w.ok ? "The sheet accepted the entry." : "The sheet refused the entry" + (w && w.error ? ": " + w.error : "."));
+      let found = false; try { const r = await fetch(url + "?list=1&kind=field&t=" + Date.now()); const j = await r.json(); found = (j.rows || []).some(x => x.seg_code === "SETUP-CHECK"); } catch (e) {}
+      set("read", found ? "pass" : "fail", found ? "Found it in the Field entries tab." : "The entry didn't come back. Look for a Field entries tab in the sheet.");
+      let d = null; try { d = await post({_action:"delete_test"}); } catch (e) {}
+      set("clean", d && d.ok ? "pass" : "fail", d && d.ok ? `Removed ${d.deleted} test row${d.deleted===1?"":"s"}.` : "Couldn't remove them. Delete rows with rater __setup_test__ by hand.");
+    }
+  }
+  const fails = Object.values(res).filter(r => r.s === "fail").length;
+  const cs = document.getElementById("checkStatus"); cs.textContent = fails ? `${fails} check${fails>1?"s":""} failed.` : "All automatic checks passed."; cs.className = "status " + (fails ? "bad" : "ok");
+  btn.disabled = false;
+}
+document.getElementById("checkBtn").addEventListener("click", () => { drawChecks(); document.getElementById("checkStatus").textContent = ""; checkDlg.showModal(); });
+document.getElementById("closeCheck").addEventListener("click", () => checkDlg.close());
+document.getElementById("runChecks").addEventListener("click", runChecks);
+
+// ---------- start ----------
+applyTestMode();
+if (store.settings.url) { pullTeam(); syncSoon(1500); }
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+</script>
+</body>
+</html>

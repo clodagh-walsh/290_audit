@@ -9,11 +9,11 @@
 /* Layout: a single column launcher — title, two large tool cards, a short help line */
 :root{
   --bg:#f3f4f2; --panel:#ffffff; --fg:#1d2321; --muted:#5d6763; --line:#d5d9d6;
-  --field:#0f7c6e; --gsv:#2b5fb4;
+  --field:#0f7c6e; --gsv:#2b5fb4; --map:#6a43b8;
   --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
   --body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
-@media (prefers-color-scheme: dark){:root{--bg:#141817;--panel:#1c2120;--fg:#e6ebe8;--muted:#9aa5a0;--line:#323a37;--field:#3fbfa9;--gsv:#7aa7f0;color-scheme:dark}}
+@media (prefers-color-scheme: dark){:root{--bg:#141817;--panel:#1c2120;--fg:#e6ebe8;--muted:#9aa5a0;--line:#323a37;--field:#3fbfa9;--gsv:#7aa7f0;--map:#b59cf0;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.5}
 main{max-width:640px;margin:0 auto;padding:32px 16px 48px;display:grid;gap:18px}
@@ -28,6 +28,9 @@ a.tool b{font-family:var(--display);font-size:1.6rem;font-weight:700;color:var(-
 a.tool span{color:var(--muted)}
 a.tool .go{font-weight:600;color:var(--c);margin-top:4px}
 .foot{font-size:.9rem;color:var(--muted)}
+h2{font-family:var(--display);font-weight:700;font-size:1.5rem;line-height:1.1;margin:18px 0 0;padding-top:18px;border-top:1px solid var(--line)}
+.maps{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.maps a.tool b{font-size:1.4rem}
 </style>
 </head>
 <body>
@@ -45,6 +48,21 @@ a.tool .go{font-weight:600;color:var(--c);margin-top:4px}
     <span class="go">Open Street View audit →</span>
   </a>
   <p class="foot">First time on a device: enter your name, then tap Team sheet and paste the link from the audit lead. Each tool asks once. Both tools open on Rockridge; switch to Chinatown at the top of the route list.</p>
+
+  <h2>Results maps</h2>
+  <p class="lede">Every rated block face, drawn on its side of the street. Choose a measure (sidewalk condition, path obstructions or curb cuts) and a rating source (field, Street View, or the two compared). Dashed blocks are where raters disagree.</p>
+  <div class="maps">
+    <a class="tool" href="Rockridge_sidewalk_condition_map.html" style="--c:var(--map)">
+      <b>Rockridge</b>
+      <span>52 block faces in the north box.</span>
+      <span class="go">Open map →</span>
+    </a>
+    <a class="tool" href="Chinatown_sidewalk_condition_map.html" style="--c:var(--map)">
+      <b>Chinatown</b>
+      <span>163 block faces.</span>
+      <span class="go">Open map →</span>
+    </a>
+  </div>
 </main>
 </body>
 </html>

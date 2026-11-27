@@ -31,6 +31,16 @@ a.tool .go{font-weight:600;color:var(--c);margin-top:4px}
 h2{font-family:var(--display);font-weight:700;font-size:1.5rem;line-height:1.1;margin:18px 0 0;padding-top:18px;border-top:1px solid var(--line)}
 .maps{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .maps a.tool b{font-size:1.4rem}
+.files{display:grid;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.file{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-top:1px solid var(--line)}
+.file:first-child{border-top:0}
+.file div{flex:1 1 260px}
+.file b{display:block;font-weight:600}
+.file span{color:var(--muted);font-size:.92rem}
+.file nav{display:flex;gap:8px}
+.file nav a{font-weight:600;font-size:.92rem;color:var(--map);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 10px;white-space:nowrap}
+.file nav a:hover{border-color:var(--map)}
+.file nav a:focus-visible{outline:2px solid var(--map);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -63,6 +73,32 @@ h2{font-family:var(--display);font-weight:700;font-size:1.5rem;line-height:1.1;m
       <span class="go">Open map →</span>
     </a>
   </div>
+
+  <h2>Agreement tables</h2>
+  <p class="lede">CSV files for building your own tables in Excel. Every file starts with an area column, so the two neighborhoods can be pasted into one sheet. Agreement values are proportions (0.96 = 96%); format those columns as percentages.</p>
+  <div class="files">
+    <div class="file">
+      <div><b>Item agreement</b><span>Every PEDS item for each comparison: pairs agreed out of pairs compared, % agreement, within one category, prevalence, and the chance-corrected statistics. One row per item, ready for a pivot table.</span></div>
+      <nav><a href="results/rockridge_item_agreement.csv" download>Rockridge</a><a href="results/chinatown_item_agreement.csv" download>Chinatown</a></nav>
+    </div>
+    <div class="file">
+      <div><b>Overview</b><span>One row per comparison: pairs, segments, mean agreement, and how many items reach 90% or fall below 70%.</span></div>
+      <nav><a href="results/rockridge_overview.csv" download>Rockridge</a><a href="results/chinatown_overview.csv" download>Chinatown</a></nav>
+    </div>
+    <div class="file">
+      <div><b>Whole question</b><span>For the check-all questions (Q4, Q5, Q7, Q8), the share of pairs where every box matched.</span></div>
+      <nav><a href="results/rockridge_whole_question.csv" download>Rockridge</a><a href="results/chinatown_whole_question.csv" download>Chinatown</a></nav>
+    </div>
+    <div class="file">
+      <div><b>Rater pairs</b><span>Mean agreement across the 28 items for each pair of raters.</span></div>
+      <nav><a href="results/rockridge_rater_pairs.csv" download>Rockridge</a><a href="results/chinatown_rater_pairs.csv" download>Chinatown</a></nav>
+    </div>
+    <div class="file">
+      <div><b>Disagreements</b><span>Every item where a pair answered differently, with each rater's coded answer, for checking against photos or Street View.</span></div>
+      <nav><a href="results/rockridge_disagreements.csv" download>Rockridge</a><a href="results/chinatown_disagreements.csv" download>Chinatown</a></nav>
+    </div>
+  </div>
+  <p class="foot">The tables are written by the rater agreement notebook each time it runs, from the ratings in the team sheet at that time.</p>
 </main>
 </body>
 </html>

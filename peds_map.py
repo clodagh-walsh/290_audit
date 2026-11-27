@@ -124,32 +124,111 @@ def segment_lines(area, final_code=lambda c: c):
         else: missing.append(code)
     return out, missing
 
-# ---------------------------------------------------------------- map
-Q6_LABEL = {1: "Poor", 2: "Fair", 3: "Good", 4: "Under repair"}
-STYLE = {   # ordinal blue ramp (steps 250 / 450 / 650): darker = better; orange and gray are outside the scale
-    "Good": "#104281", "Fair": "#2a78d6", "Poor": "#86b6ef",
-    "Under repair": "#eb6834", "No sidewalk": "#898781", "No usable rating": "#c3c2b7"}
-WORST_FIRST = ["No sidewalk", "Poor", "Under repair", "Fair", "Good"]
 
-def state(r):
-    if r["no_sidewalk"] == 1: return "No sidewalk"
+# ---------------------------------------------------------------- measures shown on the map
+# Each measure turns one rating into a value, merges several raters' values worst-case, and maps
+# the merged value to a legend category. "No sidewalk" outranks every value.
+NS = "No sidewalk"
+NONE_RATED = "No usable rating"
+OUTSIDE = {NS: "#898781", NONE_RATED: "#c3c2b7"}   # gray, outside every color scale
+
+Q6_LABEL = {1: "Poor", 2: "Fair", 3: "Good", 4: "Under repair"}
+Q6_WORST_FIRST = ["Poor", "Under repair", "Fair", "Good"]
+Q7_BOXES = [("q7_poles_signs", "poles/signs"), ("q7_parked_cars", "parked cars"), ("q7_greenery", "greenery"),
+            ("q7_garbage_cans", "garbage cans"), ("q7_other", "other")]
+Q11_LABEL = {1: "None", 2: "1 to 4", 3: "More than 4"}
+
+def _q6(r):
     return Q6_LABEL.get(r["q6_condition"]) if pd.notna(r["q6_condition"]) else None
 
-def summarize(ratings):
-    """One row per segment and method: the shown condition, whether raters disagree, and who said what."""
+def _q7(r):
+    ticked = [lab for col, lab in Q7_BOXES if r.get(col) == 1]
+    if ticked: return frozenset(ticked)
+    return frozenset() if r.get("q7_none") == 1 else None          # nothing ticked at all: can't tell
+
+def _q7_cat(v):
+    return "None" if len(v) == 0 else "1 type" if len(v) == 1 else "2 or more types"
+
+def _q7_text(v):
+    return ", ".join(lab for _, lab in Q7_BOXES if lab in v) or "none"
+
+def _q11(r):
+    return int(r["q11_curb_cuts"]) if pd.notna(r["q11_curb_cuts"]) else None
+
+MEASURES = {
+    "condition": dict(
+        name="Sidewalk condition", title="Q6 sidewalk condition",
+        value=_q6, merge=lambda vs: min(vs, key=Q6_WORST_FIRST.index),
+        category=lambda v: v, text=lambda v: v,
+        colors={"Good": "#104281", "Fair": "#2a78d6", "Poor": "#86b6ef", "Under repair": "#eb6834"},  # darker = better
+        note="A disagreement is drawn at the poorer answer."),
+    "obstructions": dict(
+        name="Path obstructions", title="Q7 path obstructions",
+        value=_q7, merge=lambda vs: frozenset().union(*vs),
+        category=_q7_cat, text=_q7_text,
+        colors={"None": "#c9b6ec", "1 type": "#8a63d2", "2 or more types": "#4b2391"},           # darker = more
+        note="Raters disagree when they ticked different boxes. The block is drawn with every type any rater ticked."),
+    "curb_cuts": dict(
+        name="Curb cuts", title="Q11 curb cuts (driveways)",
+        value=_q11, merge=max,
+        category=lambda v: Q11_LABEL[v], text=lambda v: Q11_LABEL[v],
+        colors={"None": "#8fd3c6", "1 to 4": "#2a9d8f", "More than 4": "#0c5a50"},                # darker = more
+        note="A disagreement is drawn at the higher count."),
+}
+
+def summarize(ratings, measure="condition"):
+    """One row per segment and method: the merged value, the category shown, whether raters disagree, who said what."""
+    M = MEASURES[measure]
     rows = []
     for (seg, method), g in ratings.groupby(["segment", "method"]):
-        who = [(r.rater_id + (f" (v{r.visit})" if method == "field" else ""), state(r)) for _, r in g.iterrows()]
-        known = sorted({s for _, s in who if s}, key=WORST_FIRST.index)
-        rows.append(dict(segment=seg, method=method, shown=known[0] if known else "No usable rating",
-                         disagree=len(known) > 1, n=len(who),
-                         detail="; ".join(f"{w}: {s or 'can’t tell'}" for w, s in who)))
+        who = []
+        for _, r in g.iterrows():
+            v = NS if r["no_sidewalk"] == 1 else M["value"](r)
+            who.append((r.rater_id + (f" (v{r.visit})" if method == "field" else ""), v))
+        vals = [v for _, v in who if v is not None]
+        if not vals: val = None
+        elif NS in vals: val = NS
+        else: val = M["merge"](vals)
+        shown = NONE_RATED if val is None else NS if val == NS else M["category"](val)
+        rows.append(dict(segment=seg, method=method, value=val, shown=shown, disagree=len(set(vals)) > 1, n=len(who),
+                         detail="; ".join(f"{w}: {NS if v == NS else M['text'](v) if v is not None else 'can’t tell'}"
+                                          for w, v in who)))
     return pd.DataFrame(rows)
 
-def build_map(ratings, lines, area, layers=("field", "gsv")):
+# ---------------------------------------------------------------- map
+METHOD_NAME = {"field": "Field ratings", "gsv": "Street View ratings", "both": "Field vs Street View"}
+
+def _add_lines(fg, lines, pos, M, method):
     import folium
-    summ = summarize(ratings)
-    pos = summ.set_index(["segment", "method"])
+    style = {**M["colors"], **OUTSIDE}
+    txt = lambda r: NS if r.value == NS else M["text"](r.value) if r.value is not None else "–"
+    for seg, line in lines.items():
+        if method == "both":
+            f = pos.loc[(seg, "field")] if (seg, "field") in pos.index else None
+            s = pos.loc[(seg, "gsv")] if (seg, "gsv") in pos.index else None
+            if f is None and s is None: continue
+            shown = f.shown if f is not None else NONE_RATED
+            dis = f is not None and s is not None and f.value is not None and s.value is not None and f.value != s.value
+            tip = f"Field {txt(f) if f is not None else '–'} · Street View {txt(s) if s is not None else '–'}"
+            pop = (f"<b>Field:</b> {f.detail if f is not None else 'none'}<br>"
+                   f"<b>Street View:</b> {s.detail if s is not None else 'none'}")
+        else:
+            if (seg, method) not in pos.index: continue
+            r = pos.loc[(seg, method)]
+            shown, dis, tip, pop = r.shown, r.disagree, txt(r), r.detail.replace("; ", "<br>")
+        label = f"<b>{seg}</b> · {M['name']}: {tip}" + (" · <i>raters disagree</i>" if dis else "")
+        folium.PolyLine(line, color=style[shown], weight=5, opacity=1,
+                        dash_array="2 8" if dis else None, line_cap="round").add_to(fg)
+        if dis:   # a ring at the middle so disagreements are findable at any zoom
+            folium.CircleMarker(line[len(line) // 2], radius=5, color="#0b0b0b", weight=2,
+                                fill=True, fill_color="#ffffff", fill_opacity=1).add_to(fg)
+        # a wide invisible line on top carries the hover and click, so thin marks are easy to hit
+        folium.PolyLine(line, weight=18, opacity=0, tooltip=folium.Tooltip(label, sticky=True),
+                        popup=folium.Popup(f"<b>{seg}</b> · {M['title']}<br>{pop}", max_width=320)).add_to(fg)
+
+def build_map(ratings, lines, area, layers=("field", "gsv"), measures=tuple(MEASURES)):
+    """Interactive map with a Measure and a Ratings picker. Returns (map, condition summary table)."""
+    import folium
     allpts = np.array([p for l in lines.values() for p in l])
     m = folium.Map(location=allpts.mean(0).tolist(), zoom_start=16, tiles=None, control_scale=True)
     # Esri light gray canvas (free, no key; Carto's tiles now need an API key). Native tiles stop at zoom 16.
@@ -159,46 +238,66 @@ def build_map(ratings, lines, area, layers=("field", "gsv")):
                      max_native_zoom=16, max_zoom=20).add_to(m)
     folium.TileLayer(esri.format("Reference"), attr=attr, name="Street names", control=False, overlay=True,
                      max_native_zoom=16, max_zoom=20).add_to(m)
-    names = {"field": "Field ratings", "gsv": "Street View ratings", "both": "Field vs Street View"}
-    for i, method in enumerate(layers + ("both",)):
-        fg = folium.FeatureGroup(name=names[method], overlay=False, show=(i == 0))
-        for seg, line in lines.items():
-            if method == "both":
-                f = pos.loc[(seg, "field")] if (seg, "field") in pos.index else None
-                s = pos.loc[(seg, "gsv")] if (seg, "gsv") in pos.index else None
-                if f is None and s is None: continue
-                shown = f.shown if f is not None else "No usable rating"
-                dis = f is not None and s is not None and f.shown != s.shown
-                tip = f"Field {f.shown if f is not None else '–'} · Street View {s.shown if s is not None else '–'}"
-                pop = (f"<b>Field:</b> {f.detail if f is not None else 'none'}<br>"
-                       f"<b>Street View:</b> {s.detail if s is not None else 'none'}")
-            else:
-                if (seg, method) not in pos.index: continue
-                r = pos.loc[(seg, method)]
-                shown, dis, tip, pop = r.shown, r.disagree, r.shown, r.detail.replace("; ", "<br>")
-            label = f"<b>{seg}</b> · {tip}" + (" · <i>raters disagree</i>" if dis else "")
-            folium.PolyLine(line, color=STYLE[shown], weight=5, opacity=1,
-                            dash_array="2 8" if dis else None, line_cap="round").add_to(fg)
-            if dis:   # a ring at the middle so disagreements are findable at any zoom
-                folium.CircleMarker(line[len(line) // 2], radius=5, color="#0b0b0b", weight=2,
-                                    fill=True, fill_color="#ffffff", fill_opacity=1).add_to(fg)
-            # a wide invisible line on top carries the hover and click, so thin marks are easy to hit
-            folium.PolyLine(line, weight=18, opacity=0, tooltip=folium.Tooltip(label, sticky=True),
-                            popup=folium.Popup(f"<b>{seg}</b><br>{pop}", max_width=320)).add_to(fg)
-        fg.add_to(m)
-    folium.LayerControl(collapsed=False, position="topright").add_to(m)
+
+    methods = tuple(layers) + ("both",)
+    groups, summaries = {}, {}
+    for mi, key in enumerate(measures):
+        M = MEASURES[key]
+        summaries[key] = summarize(ratings, key)
+        pos = summaries[key].set_index(["segment", "method"])
+        for i, method in enumerate(methods):
+            fg = folium.FeatureGroup(name=f"{M['name']} · {METHOD_NAME[method]}", show=(mi == 0 and i == 0))
+            _add_lines(fg, lines, pos, M, method)
+            fg.add_to(m)
+            groups[f"{key}|{method}"] = fg.get_name()
+
+    # ---- legend, one block per measure (only the selected one is visible)
     DASH = ' stroke-dasharray="2 8"'
     sw = lambda c, dash=False: (f'<svg width="28" height="10"><line x1="3" y1="5" x2="25" y2="5" stroke="{c}" '
                                 f'stroke-width="5" stroke-linecap="round"{DASH if dash else ""}/></svg>')
-    rowsh = "".join(f'<div>{sw(c)} {k}</div>' for k, c in STYLE.items())
-    legend = f"""
-    <div style="position:fixed;bottom:24px;left:12px;z-index:9999;background:#fcfcfb;color:#0b0b0b;
-         padding:10px 12px;border-radius:8px;box-shadow:0 0 0 1px rgba(11,11,11,.10),0 2px 6px rgba(0,0,0,.12);
-         font:12px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif">
-      <div style="font-weight:600;margin-bottom:2px">{area} · Q6 sidewalk condition</div>{rowsh}
-      <div style="margin-top:4px;color:#52514e">{sw('#2a78d6', True)} raters disagree
-        <svg width="14" height="12"><circle cx="7" cy="6" r="4.5" fill="#fff" stroke="#0b0b0b" stroke-width="2"/></svg></div>
-      <div style="color:#52514e;max-width:230px">A disagreement is drawn at the poorer answer. Hover or click a block for each rating.</div>
-    </div>"""
-    m.get_root().html.add_child(folium.Element(legend))
-    return m, summ
+    ring = ('<svg width="14" height="12"><circle cx="7" cy="6" r="4.5" fill="#fff" stroke="#0b0b0b" '
+            'stroke-width="2"/></svg>')
+    blocks = []
+    for i, key in enumerate(measures):
+        M = MEASURES[key]
+        rows = "".join(f"<div>{sw(c)} {k}</div>" for k, c in {**M["colors"], **OUTSIDE}.items())
+        mid = list(M["colors"].values())[1]
+        blocks.append(f"""<div class="peds-legend" data-measure="{key}" style="display:{'block' if i == 0 else 'none'}">
+          <div style="font-weight:600;margin-bottom:2px">{area} · {M['title']}</div>{rows}
+          <div style="margin-top:4px;color:#52514e">{sw(mid, True)} raters disagree {ring}</div>
+          <div style="color:#52514e;max-width:240px">{M['note']} Hover or click a block for each rating.</div></div>""")
+    box = ("background:#fcfcfb;color:#0b0b0b;padding:10px 12px;border-radius:8px;"
+           "box-shadow:0 0 0 1px rgba(11,11,11,.10),0 2px 6px rgba(0,0,0,.12);"
+           "font:12px/1.6 system-ui,-apple-system,'Segoe UI',sans-serif")
+    sel = "display:block;width:100%;margin:2px 0 8px;font:inherit;padding:3px 4px"
+    m_opts = "".join(f'<option value="{k}">{MEASURES[k]["name"]}</option>' for k in measures)
+    r_opts = "".join(f'<option value="{k}">{METHOD_NAME[k]}</option>' for k in methods)
+    html = f"""
+    <div style="position:fixed;top:12px;right:12px;z-index:9999;min-width:200px;{box}">
+      <label style="font-weight:600">Measure<select id="peds-measure" style="{sel}">{m_opts}</select></label>
+      <label style="font-weight:600">Ratings<select id="peds-method" style="{sel};margin-bottom:0">{r_opts}</select></label>
+    </div>
+    <div style="position:fixed;bottom:24px;left:12px;z-index:9999;{box}">{''.join(blocks)}</div>"""
+    m.get_root().html.add_child(folium.Element(html))
+
+    # folium declares the map and groups as globals in an inline script, so they exist by the load event
+    groups_js = "{" + ",".join(f'"{k}": {v}' for k, v in groups.items()) + "}"
+    js = f"""
+    window.addEventListener("load", function () {{
+      var map = {m.get_name()}, groups = {groups_js};
+      var ms = document.getElementById("peds-measure"), rs = document.getElementById("peds-method");
+      function update() {{
+        var want = ms.value + "|" + rs.value;
+        Object.keys(groups).forEach(function (k) {{
+          if (k === want) {{ if (!map.hasLayer(groups[k])) map.addLayer(groups[k]); }}
+          else if (map.hasLayer(groups[k])) map.removeLayer(groups[k]);
+        }});
+        map.closePopup();
+        document.querySelectorAll(".peds-legend").forEach(function (el) {{
+          el.style.display = el.getAttribute("data-measure") === ms.value ? "block" : "none";
+        }});
+      }}
+      ms.addEventListener("change", update); rs.addEventListener("change", update); update();
+    }});"""
+    m.get_root().html.add_child(folium.Element(f"<script>{js}</script>"))
+    return m, summaries.get("condition", next(iter(summaries.values())))
